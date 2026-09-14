@@ -1,0 +1,528 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadPageBody } from '../../helpers/dom';
+import {
+  ACTIVITY_ERROR_TEXT,
+  BLOCK_FAILED_TEXT,
+  HOVER_HINT,
+  PALETTE_SIZE,
+  colourClass,
+  createActivityPanel,
+  nearestSlot,
+  toRuns,
+} from '../../../src/dashboard/activity';
+import type { Message, ResponseFor } from '../../../src/shared/messages';
+import type { ActivityView, HostTotal, MinuteSlot } from '../../../src/shared/types';
+
+const NOW = new Date(2026, 8, 14, 12, 0, 0).getTime();
+
+const host = (over: Partial<HostTotal> = {}): HostTotal => ({
+  host: 'x.com',
+  url: 'https://x.com/home',
+  seconds: 600,
+  visits: 3,
+  share: 0.6,
+  hourly: Array.from({ length: 24 }, (_unused, hour) => (hour === 9 ? 600 : 0)),
+  suggestedPattern: 'x\\.com',
+  hasRule: false,
+  ...over,
+});
+
+const slot = (minute: number, hostName = 'x.com', activeSeconds = 60): MinuteSlot => ({
+  minute,
+  activeSeconds,
+  host: hostName,
+});
+
+const view = (over: Partial<ActivityView> = {}): ActivityView => ({
+  date: '2026-09-14',
+  minDate: '2026-08-16',
+  maxDate: '2026-09-14',
+  totalSeconds: 1000,
+  coveredSeconds: 250,
+  hostCount: 2,
+  peakMinute: 540,
+  hourly: Array.from({ length: 24 }, () => 0),
+  minutes: [slot(540), slot(541)],
+  top: [host(), host({ host: 'y.com', url: 'https://y.com/', seconds: 400, share: 0.4 })],
+  datesWithData: ['2026-09-14'],
+  ...over,
+});
+
+function mount(responses: Partial<Record<Message['type'], unknown>> = {}) {
+  const sent: Message[] = [];
+  const send = vi.fn(async (message: Message) => {
+    sent.push(message);
+    const canned = responses[message.type];
+    if (typeof canned === 'function') return (canned as (m: Message) => unknown)(message);
+    if (canned !== undefined) return canned;
+    if (message.type !== 'getActivity') return { ok: true };
+    return view({ date: (message as Extract<Message, { type: 'getActivity' }>).date });
+  }) as unknown as <M extends Message>(message: M) => Promise<ResponseFor<M>>;
+
+  const onRulesChanged = vi.fn();
+  const panel = createActivityPanel(document, { send, now: () => NOW, onRulesChanged });
+  return { panel, send, sent, onRulesChanged };
+}
+
+const el = (id: string) => document.getElementById(id) as HTMLElement;
+const rows = () => Array.from(document.querySelectorAll<HTMLLIElement>('.top-row'));
+const bars = () => Array.from(document.querySelectorAll<SVGRectElement>('.tl-bar'));
+const legendItems = () => Array.from(document.querySelectorAll<HTMLLIElement>('.legend-item'));
+
+/** jsdom does no layout, so give the chart a box the pointer maths can use. */
+function sizeChart(width = 1440): void {
+  const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
+  chart.getBoundingClientRect = () => ({ left: 0, width, top: 0, height: 120 }) as DOMRect;
+}
+
+function moveOver(clientX: number): void {
+  const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
+  chart.dispatchEvent(new MouseEvent('mousemove', { clientX, bubbles: true }));
+}
+
+describe('colourClass', () => {
+  it('gives each of the leading hosts its own series colour', () => {
+    expect(colourClass(0)).toBe('tl-0');
+    expect(colourClass(PALETTE_SIZE - 1)).toBe(`tl-${PALETTE_SIZE - 1}`);
+  });
+
+  it('falls back to the neutral colour past the palette', () => {
+    expect(colourClass(PALETTE_SIZE)).toBe('tl-other');
+  });
+});
+
+describe('toRuns', () => {
+  it('joins adjacent minutes on one site into a single stretch', () => {
+    expect(toRuns([slot(10), slot(11), slot(12)])).toEqual([
+      { start: 10, end: 13, host: 'x.com', activeSeconds: 60 },
+    ]);
+  });
+
+  it('breaks a stretch when the site changes', () => {
+    expect(toRuns([slot(10), slot(11, 'y.com')])).toEqual([
+      { start: 10, end: 11, host: 'x.com', activeSeconds: 60 },
+      { start: 11, end: 12, host: 'y.com', activeSeconds: 60 },
+    ]);
+  });
+
+  it('breaks a stretch across a gap', () => {
+    expect(toRuns([slot(10), slot(40)]).map((run) => run.start)).toEqual([10, 40]);
+  });
+
+  it('takes the fullest minute as the height of the stretch', () => {
+    expect(toRuns([slot(10, 'x.com', 12), slot(11, 'x.com', 60)])[0]?.activeSeconds).toBe(60);
+  });
+
+  it('has nothing to draw for a quiet day', () => {
+    expect(toRuns([])).toEqual([]);
+  });
+});
+
+describe('nearestSlot', () => {
+  it('finds the closest active minute within tolerance', () => {
+    expect(nearestSlot([slot(100), slot(200)], 203)?.minute).toBe(200);
+  });
+
+  it('returns nothing over a quiet stretch', () => {
+    expect(nearestSlot([slot(100)], 600)).toBeNull();
+  });
+
+  it('returns nothing when there is no activity at all', () => {
+    expect(nearestSlot([], 600)).toBeNull();
+  });
+});
+
+describe('activity panel', () => {
+  beforeEach(() => {
+    loadPageBody('dashboard.html');
+  });
+
+  it('requests today by default', async () => {
+    const { panel, sent } = mount();
+    await panel.load();
+    expect(sent).toEqual([{ type: 'getActivity', date: '2026-09-14' }]);
+    expect(panel.getDate()).toBe('2026-09-14');
+  });
+
+  it('renders the stat strip', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    expect(el('activity-total').textContent).toBe('16m');
+    expect(el('activity-total-sub').textContent).toBe('across 2 active minutes');
+    expect(el('activity-sites').textContent).toBe('2');
+    expect(el('activity-peak').textContent).toBe('09:00');
+    expect(el('activity-covered').textContent).toBe('25%');
+    expect(el('activity-covered-sub').textContent).toBe('4m of tracked time');
+    expect(el('activity-day-label').textContent).toBe('Today');
+  });
+
+  it('shows a resting state when the day is empty', async () => {
+    const { panel } = mount({
+      getActivity: view({ totalSeconds: 0, coveredSeconds: 0, hostCount: 0, peakMinute: null, minutes: [], top: [] }),
+    });
+    await panel.load();
+
+    expect(el('activity-total-sub').textContent).toBe('no activity yet');
+    expect(el('activity-peak').textContent).toBe('—');
+    expect(el('activity-covered').textContent).toBe('0%');
+    expect(el('activity-empty').hidden).toBe(false);
+    expect(el('activity-top-panel').hidden).toBe(true);
+  });
+
+  it('draws one block per stretch of browsing, plus hour gridlines', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    // The two adjacent minutes on x.com are one stretch, so one block.
+    expect(bars()).toHaveLength(1);
+    expect(document.querySelectorAll('.tl-grid')).toHaveLength(23);
+    expect(bars()[0]?.getAttribute('class')).toContain('tl-0');
+    expect(bars()[0]?.dataset['host']).toBe('x.com');
+  });
+
+  it('widens a one-minute visit so it stays visible', async () => {
+    const { panel } = mount({ getActivity: view({ minutes: [slot(540)] }) });
+    await panel.load();
+    expect(Number(bars()[0]?.getAttribute('width'))).toBeGreaterThan(1);
+  });
+
+  it('draws a partly-spent minute shorter than a full one', async () => {
+    const { panel } = mount({
+      getActivity: view({ minutes: [slot(100, 'x.com', 15), slot(500, 'y.com', 60)] }),
+    });
+    await panel.load();
+    const [partial, full] = bars().map((bar) => Number(bar.getAttribute('height')));
+    expect(partial).toBeLessThan(full as number);
+  });
+
+  it('renders a row per host with share, visits, and a sparkline', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    const first = rows()[0] as HTMLLIElement;
+    expect(first.querySelector('[data-field="host"]')?.textContent).toBe('x.com');
+    expect(first.querySelector('[data-field="time"]')?.textContent).toBe('10m');
+    expect(first.querySelector('[data-field="share"]')?.textContent).toBe('60% · 3 visits');
+    expect(first.querySelectorAll('.spark-bar')).toHaveLength(1);
+    expect(el('activity-top-meta').textContent).toBe('2 of 2');
+  });
+
+  it('uses the singular form for a single visit', async () => {
+    const { panel } = mount({ getActivity: view({ top: [host({ visits: 1 })] }) });
+    await panel.load();
+    expect(rows()[0]?.querySelector('[data-field="share"]')?.textContent).toBe('60% · 1 visit');
+  });
+
+  it('swaps the block form for a pill once a rule covers the host', async () => {
+    const { panel } = mount({ getActivity: view({ top: [host({ hasRule: true })] }) });
+    await panel.load();
+
+    const row = rows()[0] as HTMLLIElement;
+    expect((row.querySelector('[data-field="has-rule"]') as HTMLElement).hidden).toBe(false);
+    expect((row.querySelector('[data-field="block-form"]') as HTMLElement).hidden).toBe(true);
+  });
+
+  // ----- date navigation -----
+
+  it('steps to the previous and next day', async () => {
+    const { panel, sent } = mount();
+    await panel.load();
+
+    el('activity-prev').click();
+    await vi.waitFor(() => expect(panel.getDate()).toBe('2026-09-13'));
+
+    el('activity-next').click();
+    await vi.waitFor(() => expect(panel.getDate()).toBe('2026-09-14'));
+    expect(sent.map((message) => (message as { date?: string }).date)).toEqual([
+      '2026-09-14',
+      '2026-09-13',
+      '2026-09-14',
+    ]);
+  });
+
+  it('jumps back to today', async () => {
+    const { panel } = mount();
+    await panel.load('2026-09-10');
+    el('activity-today').click();
+    await vi.waitFor(() => expect(panel.getDate()).toBe('2026-09-14'));
+  });
+
+  it('disables navigation at the edges of the retention window', async () => {
+    const { panel } = mount({ getActivity: view({ date: '2026-08-16' }) });
+    await panel.load('2026-08-16');
+    expect((el('activity-prev') as HTMLButtonElement).disabled).toBe(true);
+    expect((el('activity-next') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('disables next and today on the newest day', async () => {
+    const { panel } = mount();
+    await panel.load();
+    expect((el('activity-next') as HTMLButtonElement).disabled).toBe(true);
+    expect((el('activity-today') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('loads the day chosen in the date field', async () => {
+    const { panel } = mount();
+    await panel.load();
+    const input = el('activity-date') as HTMLInputElement;
+    input.value = '2026-09-01';
+    input.dispatchEvent(new Event('change'));
+    await vi.waitFor(() => expect(panel.getDate()).toBe('2026-09-01'));
+  });
+
+  it('ignores a cleared date field', async () => {
+    const { panel, sent } = mount();
+    await panel.load();
+    const input = el('activity-date') as HTMLInputElement;
+    input.value = '';
+    input.dispatchEvent(new Event('change'));
+    expect(sent).toHaveLength(1);
+  });
+
+  // ----- hover and highlighting -----
+
+  it('shows a tooltip and crosshair over an active minute', async () => {
+    const { panel } = mount();
+    await panel.load();
+    sizeChart();
+
+    moveOver(540);
+
+    expect(el('activity-tooltip').hidden).toBe(false);
+    expect(el('activity-tooltip-time').textContent).toBe('09:00');
+    expect(el('activity-tooltip-host').textContent).toBe('x.com');
+    expect(el('activity-tooltip-dur').textContent).toBe('1m 00s');
+    expect(el('activity-hint').textContent).toBe('09:00 · x.com');
+    expect(document.querySelector('.tl-cursor')?.getAttribute('visibility')).toBe('visible');
+  });
+
+  it('dims other hosts while hovering the chart', async () => {
+    const { panel } = mount({
+      getActivity: view({ minutes: [slot(540, 'x.com'), slot(800, 'y.com')] }),
+    });
+    await panel.load();
+    sizeChart();
+
+    moveOver(540);
+
+    const chart = el('activity-chart');
+    expect(chart.classList.contains('is-dimmed')).toBe(true);
+    expect(bars()[0]?.classList.contains('is-lit')).toBe(true);
+    expect(bars()[1]?.classList.contains('is-lit')).toBe(false);
+  });
+
+  it('hides the tooltip over a quiet stretch and on leave', async () => {
+    const { panel } = mount();
+    await panel.load();
+    sizeChart();
+
+    moveOver(540);
+    moveOver(1200);
+    expect(el('activity-tooltip').hidden).toBe(true);
+    expect(el('activity-hint').textContent).toBe(HOVER_HINT);
+
+    moveOver(540);
+    el('activity-chart').dispatchEvent(new MouseEvent('mouseleave'));
+    expect(el('activity-tooltip').hidden).toBe(true);
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(false);
+  });
+
+  it('ignores pointer moves before the chart has been laid out', async () => {
+    const { panel } = mount();
+    await panel.load();
+    sizeChart(0);
+
+    moveOver(540);
+
+    expect(el('activity-tooltip').hidden).toBe(true);
+  });
+
+  it('ignores pointer moves outside the chart bounds', async () => {
+    const { panel } = mount();
+    await panel.load();
+    sizeChart();
+
+    moveOver(-40);
+
+    expect(el('activity-tooltip').hidden).toBe(true);
+  });
+
+  it('highlights a host when its row is hovered', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    const first = rows()[0] as HTMLLIElement;
+    first.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(first.classList.contains('is-lit')).toBe(true);
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(true);
+
+    first.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(first.classList.contains('is-lit')).toBe(false);
+  });
+
+  it('pins a host from the legend and releases it on a second click', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    const [first] = legendItems();
+    first?.click();
+    expect(first?.classList.contains('is-pinned')).toBe(true);
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(true);
+
+    // Hovering elsewhere must not clear a pin.
+    (rows()[1] as HTMLLIElement).dispatchEvent(new MouseEvent('mouseleave'));
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(true);
+
+    first?.click();
+    expect(first?.classList.contains('is-pinned')).toBe(false);
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(false);
+  });
+
+  it('highlights from the legend on hover', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    const [first] = legendItems();
+    first?.dispatchEvent(new MouseEvent('mouseenter'));
+    expect(rows()[0]?.classList.contains('is-lit')).toBe(true);
+    first?.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(rows()[0]?.classList.contains('is-lit')).toBe(false);
+  });
+
+  it('caps the legend at the palette size', async () => {
+    const many = Array.from({ length: PALETTE_SIZE + 3 }, (_unused, index) =>
+      host({ host: `s${index}.com`, url: `https://s${index}.com/` }),
+    );
+    const { panel } = mount({ getActivity: view({ top: many }) });
+    await panel.load();
+    expect(legendItems()).toHaveLength(PALETTE_SIZE);
+  });
+
+  it('keeps a pin across a reload while the host is still listed', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    legendItems()[0]?.click();
+    await panel.load();
+
+    expect(legendItems()[0]?.classList.contains('is-pinned')).toBe(true);
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(true);
+  });
+
+  it('drops a pin when the host leaves the list', async () => {
+    const send = vi.fn();
+    const responses: ActivityView[] = [view(), view({ top: [host({ host: 'y.com' })] })];
+    let call = 0;
+    const panel = createActivityPanel(document, {
+      send: (async (message: Message) => {
+        void send(message);
+        return message.type === 'getActivity' ? responses[call++] : { ok: true };
+      }) as never,
+      now: () => NOW,
+    });
+
+    await panel.load();
+    legendItems()[0]?.click();
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(true);
+
+    await panel.load();
+    expect(el('activity-chart').classList.contains('is-dimmed')).toBe(false);
+  });
+
+  // ----- one-click block -----
+
+  it('creates a rule from a row and refreshes both tabs', async () => {
+    const { panel, sent, onRulesChanged } = mount();
+    await panel.load();
+
+    const row = rows()[0] as HTMLLIElement;
+    (row.querySelector('[data-field="minutes"]') as HTMLInputElement).value = '25';
+    (row.querySelector('[data-action="block"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => expect(onRulesChanged).toHaveBeenCalled());
+    expect(sent).toContainEqual({
+      type: 'createRule',
+      input: { pattern: 'x\\.com', limitMinutes: 25 },
+    });
+    // The day is reloaded so the row flips to "Limited".
+    expect(sent.filter((message) => message.type === 'getActivity')).toHaveLength(2);
+  });
+
+  it('rejects a nonsense minute value without sending anything', async () => {
+    const { panel, sent } = mount();
+    await panel.load();
+
+    const row = rows()[0] as HTMLLIElement;
+    const minutes = row.querySelector('[data-field="minutes"]') as HTMLInputElement;
+    minutes.value = '0';
+    (row.querySelector('[data-action="block"]') as HTMLButtonElement).click();
+
+    expect(minutes.getAttribute('aria-invalid')).toBe('true');
+    expect(sent.filter((message) => message.type === 'createRule')).toHaveLength(0);
+  });
+
+  it('surfaces a rejection from the worker', async () => {
+    const { panel } = mount({ createRule: { ok: false, error: 'You can have at most 10 rules' } });
+    await panel.load();
+
+    (rows()[0]?.querySelector('[data-action="block"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => expect(el('activity-error').hidden).toBe(false));
+    expect(el('activity-error').textContent).toBe('You can have at most 10 rules');
+  });
+
+  it('reports a failure when the block request throws', async () => {
+    const panel = createActivityPanel(document, {
+      send: (async (message: Message) => {
+        if (message.type === 'createRule') throw new Error('offline');
+        return view();
+      }) as never,
+      now: () => NOW,
+    });
+    await panel.load();
+
+    (rows()[0]?.querySelector('[data-action="block"]') as HTMLButtonElement).click();
+
+    await vi.waitFor(() => expect(el('activity-error').textContent).toBe(BLOCK_FAILED_TEXT));
+  });
+
+  // ----- failure handling -----
+
+  it('ignores pointer moves when no day is loaded', async () => {
+    const panel = createActivityPanel(document, {
+      send: (async () => {
+        throw new Error('offline');
+      }) as never,
+      now: () => NOW,
+    });
+    await panel.load();
+    sizeChart();
+
+    moveOver(540);
+
+    expect(el('activity-tooltip').hidden).toBe(true);
+  });
+
+  it('reports when the day cannot be loaded', async () => {
+    const panel = createActivityPanel(document, {
+      send: (async () => {
+        throw new Error('offline');
+      }) as never,
+      now: () => NOW,
+    });
+
+    await panel.load();
+
+    expect(el('activity-error').hidden).toBe(false);
+    expect(el('activity-error').textContent).toBe(ACTIVITY_ERROR_TEXT);
+    expect(rows()).toHaveLength(0);
+  });
+
+  it('throws a clear error when the markup is missing', () => {
+    document.body.innerHTML = '<div></div>';
+    expect(() => createActivityPanel(document, { send: (async () => view()) as never, now: () => NOW })).toThrow(
+      'Missing element: #activity-date',
+    );
+  });
+});

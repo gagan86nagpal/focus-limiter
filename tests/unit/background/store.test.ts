@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { installChromeMock, type ChromeMock } from '../../helpers/chrome-mock';
-import { emptyUsage, loadData, loadRuntime, saveData, saveRuntime, saveUsage } from '../../../src/background/store';
+import {
+  emptyUsage,
+  loadActivity,
+  loadData,
+  loadRuntime,
+  saveActivity,
+  saveData,
+  saveRuntime,
+  saveUsage,
+} from '../../../src/background/store';
 import type { Rule } from '../../../src/shared/types';
 
 const NOW = new Date(2026, 8, 14, 10, 0, 0).getTime();
@@ -59,6 +68,25 @@ describe('background store', () => {
     const data = await loadData(NOW);
     expect(data.rules).toEqual([rule]);
     expect(data.usage.seconds['r1']).toBe(90);
+  });
+
+  it('loadActivity returns an empty history when nothing is stored', async () => {
+    expect(await loadActivity()).toEqual([]);
+  });
+
+  it('loadActivity ignores a non-array activity value', async () => {
+    await chromeMock.storage.local.set({ activity: 'nonsense' });
+    expect(await loadActivity()).toEqual([]);
+  });
+
+  it('saveActivity round-trips the history without disturbing rules', async () => {
+    const days = [
+      { date: '2026-09-14', segments: [{ url: 'https://x.com/', host: 'x.com', startedAt: 1, endedAt: 2 }] },
+    ];
+    await saveData({ rules: [rule], usage: { date: '2026-09-14', seconds: {} } });
+    await saveActivity(days);
+    expect(await loadActivity()).toEqual(days);
+    expect((await loadData(NOW)).rules).toEqual([rule]);
   });
 
   it('loadRuntime returns defaults when nothing is stored', async () => {

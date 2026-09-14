@@ -9,6 +9,7 @@ function stubTracker(): Tracker {
     setFocused: vi.fn(),
     setIdle: vi.fn(),
     getState: vi.fn(async () => ({ rules: [], maxRules: 10 })),
+    getActivity: vi.fn(async () => ({ date: '2026-09-14' })),
     createRule: vi.fn(async () => ({ ok: true, rule: { id: 'r', pattern: 'x', limitMinutes: 5, createdAt: 0 } })),
     updateRule: vi.fn(async () => ({ ok: true, rule: { id: 'r', pattern: 'x', limitMinutes: 5, createdAt: 0 } })),
     deleteRule: vi.fn(async () => ({ ok: true })),
@@ -25,6 +26,12 @@ describe('handleMessage', () => {
     const tracker = stubTracker();
     await handleMessage(tracker, { type: 'getState' });
     expect(tracker.getState).toHaveBeenCalled();
+  });
+
+  it('routes getActivity with the requested date', async () => {
+    const tracker = stubTracker();
+    await handleMessage(tracker, { type: 'getActivity', date: '2026-09-14' });
+    expect(tracker.getActivity).toHaveBeenCalledWith('2026-09-14');
   });
 
   it('routes createRule with its input', async () => {

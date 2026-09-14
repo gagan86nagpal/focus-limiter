@@ -17,14 +17,24 @@
           <button type="button" class="btn btn-ghost theme-toggle" id="theme-toggle" data-testid="theme-toggle">
             Dark mode
           </button>
-          <button type="button" class="btn btn-primary" id="add-rule" data-testid="add-rule">+ Add rule</button>
         </div>
       </header>
 
-      <section class="section" aria-labelledby="rules-heading">
+      <div class="tabs" role="tablist" aria-label="Dashboard sections">
+        <button type="button" class="tab" role="tab" id="tab-rules" aria-controls="panel-rules"
+          aria-selected="true" data-testid="tab-rules">Rules</button>
+        <button type="button" class="tab" role="tab" id="tab-activity" aria-controls="panel-activity"
+          aria-selected="false" tabindex="-1" data-testid="tab-activity">Activity</button>
+      </div>
+
+      <section class="section" id="panel-rules" role="tabpanel" aria-labelledby="tab-rules"
+        data-testid="panel-rules">
         <div class="section-header">
-          <h2 class="section-title" id="rules-heading">Your rules</h2>
-          <span class="section-meta" id="rule-count" data-testid="rule-count"></span>
+          <div class="section-heading">
+            <h2 class="section-title" id="rules-heading">Your rules</h2>
+            <span class="section-meta" id="rule-count" data-testid="rule-count"></span>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" id="add-rule" data-testid="add-rule">+ Add rule</button>
         </div>
 
         <p class="notice" id="limit-notice" data-testid="limit-notice" hidden>
@@ -45,8 +55,89 @@
         <ul class="rule-list" id="rule-list" data-testid="rule-list"></ul>
       </section>
 
+      <section class="section" id="panel-activity" role="tabpanel" aria-labelledby="tab-activity"
+        data-testid="panel-activity" hidden>
+        <div class="section-header">
+          <div class="section-heading">
+            <h2 class="section-title" id="activity-heading">Activity</h2>
+            <span class="section-meta" id="activity-day-label" data-testid="activity-day-label"></span>
+          </div>
+          <div class="date-nav">
+            <button type="button" class="icon-btn" id="activity-prev" data-testid="activity-prev"
+              aria-label="Previous day">‹</button>
+            <input class="input input-date" type="date" id="activity-date" data-testid="activity-date"
+              aria-label="Activity date" />
+            <button type="button" class="icon-btn" id="activity-next" data-testid="activity-next"
+              aria-label="Next day">›</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="activity-today"
+              data-testid="activity-today">Today</button>
+          </div>
+        </div>
+
+        <p class="notice is-error" id="activity-error" data-testid="activity-error" role="alert" hidden></p>
+
+        <div class="stat-strip">
+          <div class="stat-block">
+            <span class="stat-caption">Active time</span>
+            <span class="stat-figure" id="activity-total" data-testid="activity-total">0s</span>
+            <span class="stat-sub" id="activity-total-sub" data-testid="activity-total-sub">no activity yet</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-caption">Sites</span>
+            <span class="stat-figure" id="activity-sites" data-testid="activity-sites">0</span>
+            <span class="stat-sub" id="activity-sites-sub">distinct hosts</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-caption">Peak</span>
+            <span class="stat-figure" id="activity-peak" data-testid="activity-peak">—</span>
+            <span class="stat-sub" id="activity-peak-sub">busiest minute</span>
+          </div>
+          <div class="stat-block">
+            <span class="stat-caption">Under a limit</span>
+            <span class="stat-figure" id="activity-covered" data-testid="activity-covered">0%</span>
+            <span class="stat-sub" id="activity-covered-sub" data-testid="activity-covered-sub">of tracked time</span>
+          </div>
+        </div>
+
+        <figure class="panel" data-testid="activity-timeline">
+          <div class="panel-head">
+            <figcaption class="panel-title">Minute by minute</figcaption>
+            <span class="panel-hint" id="activity-hint" data-testid="activity-hint">Hover the chart for detail</span>
+          </div>
+          <div class="chart-wrap" id="activity-chart-wrap">
+            <svg class="chart" id="activity-chart" data-testid="activity-chart" viewBox="0 0 1440 120"
+              preserveAspectRatio="none" role="img"
+              aria-label="Minute by minute activity for the selected day"></svg>
+            <div class="chart-tooltip" id="activity-tooltip" data-testid="activity-tooltip" role="status" hidden>
+              <span class="tooltip-swatch" id="activity-tooltip-swatch"></span>
+              <span class="tooltip-time" id="activity-tooltip-time"></span>
+              <span class="tooltip-host" id="activity-tooltip-host"></span>
+              <span class="tooltip-dur" id="activity-tooltip-dur"></span>
+            </div>
+          </div>
+          <div class="chart-axis" aria-hidden="true">
+            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
+          </div>
+          <ul class="legend" id="activity-legend" data-testid="activity-legend"></ul>
+        </figure>
+
+        <div class="empty-state" id="activity-empty" data-testid="activity-empty" hidden>
+          <h3 class="empty-title">Nothing recorded</h3>
+          <p class="empty-copy">No browsing was tracked on this day. Pick another date above.</p>
+        </div>
+
+        <div class="panel" id="activity-top-panel">
+          <div class="panel-head">
+            <h3 class="panel-title" id="activity-top-heading">Top sites</h3>
+            <span class="panel-hint" id="activity-top-meta" data-testid="activity-top-meta"></span>
+          </div>
+          <ol class="top-list" id="activity-top" data-testid="activity-top"
+            aria-labelledby="activity-top-heading"></ol>
+        </div>
+      </section>
+
       <footer class="page-footer">
-        <span>Limits reset at midnight.</span>
+        <span>Limits reset at midnight. Activity is kept for 30 days.</span>
         <span id="last-updated" data-testid="last-updated"></span>
       </footer>
     </main>
@@ -78,6 +169,33 @@
           <span class="rule-confirm-copy">Delete this rule?</span>
           <button type="button" class="btn btn-ghost btn-sm" data-action="cancel-delete" data-testid="cancel-delete">Cancel</button>
           <button type="button" class="btn btn-danger btn-sm" data-action="confirm-delete" data-testid="confirm-delete">Delete</button>
+        </div>
+      </li>
+    </template>
+
+    <template id="activity-row-template">
+      <li class="top-row" data-testid="activity-row">
+        <span class="top-rank" data-field="rank"></span>
+        <span class="top-dot" data-field="dot"></span>
+        <div class="top-identity">
+          <span class="top-host" data-field="host" data-testid="activity-host"></span>
+          <span class="top-url" data-field="url" data-testid="activity-url"></span>
+        </div>
+        <svg class="top-spark" data-field="spark" viewBox="0 0 24 10" preserveAspectRatio="none"
+          aria-hidden="true"></svg>
+        <div class="top-meter">
+          <span class="top-time" data-field="time" data-testid="activity-time"></span>
+          <span class="top-share" data-field="share" data-testid="activity-share"></span>
+        </div>
+        <div class="top-block" data-field="block">
+          <span class="status-pill is-neutral" data-field="has-rule" data-testid="activity-has-rule" hidden>Limited</span>
+          <div class="block-form" data-field="block-form">
+            <input class="input input-number input-sm" type="number" min="1" max="1440" step="1" value="10"
+              data-field="minutes" data-testid="activity-minutes" aria-label="Daily limit in minutes" />
+            <span class="input-suffix input-suffix-sm">min</span>
+            <button type="button" class="btn btn-secondary btn-sm" data-action="block"
+              data-testid="activity-block">Block</button>
+          </div>
         </div>
       </li>
     </template>

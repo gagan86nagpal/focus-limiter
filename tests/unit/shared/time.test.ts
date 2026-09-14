@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { dateKey, formatLimit, formatRelative, formatUsage, startOfDay } from '../../../src/shared/time';
+import {
+  dateKey,
+  dateStart,
+  formatClock,
+  formatCompact,
+  formatDayLabel,
+  formatLimit,
+  formatRelative,
+  formatUsage,
+  shiftDays,
+  startOfDay,
+} from '../../../src/shared/time';
 
 describe('dateKey', () => {
   it('formats a local date with zero-padding', () => {
@@ -38,6 +49,28 @@ describe('formatUsage', () => {
   it('floors fractional seconds and clamps negatives to zero', () => {
     expect(formatUsage(59.9)).toBe('59s');
     expect(formatUsage(-5)).toBe('0s');
+  });
+});
+
+describe('formatCompact', () => {
+  it('shows seconds under a minute', () => {
+    expect(formatCompact(38)).toBe('38s');
+    expect(formatCompact(0)).toBe('0s');
+  });
+
+  it('drops the seconds once there are minutes', () => {
+    expect(formatCompact(151)).toBe('2m');
+    expect(formatCompact(3599)).toBe('59m');
+  });
+
+  it('pads the minutes alongside hours', () => {
+    expect(formatCompact(14_760)).toBe('4h 06m');
+    expect(formatCompact(3600)).toBe('1h 00m');
+  });
+
+  it('floors fractions and clamps negatives to zero', () => {
+    expect(formatCompact(59.9)).toBe('59s');
+    expect(formatCompact(-5)).toBe('0s');
   });
 });
 
@@ -86,5 +119,63 @@ describe('formatRelative', () => {
 
   it('clamps negative elapsed time', () => {
     expect(formatRelative(-1000)).toBe('just now');
+  });
+});
+
+describe('shiftDays', () => {
+  it('moves to midnight of a later day', () => {
+    const ts = new Date(2026, 8, 14, 18, 30).getTime();
+    expect(shiftDays(ts, 1)).toBe(new Date(2026, 8, 15, 0, 0, 0, 0).getTime());
+  });
+
+  it('moves to midnight of an earlier day, across a month boundary', () => {
+    const ts = new Date(2026, 8, 2, 6, 0).getTime();
+    expect(shiftDays(ts, -3)).toBe(new Date(2026, 7, 30, 0, 0, 0, 0).getTime());
+  });
+
+  it('returns midnight of the same day for a zero shift', () => {
+    const ts = new Date(2026, 8, 14, 23, 59).getTime();
+    expect(shiftDays(ts, 0)).toBe(startOfDay(ts));
+  });
+});
+
+describe('dateStart', () => {
+  it('is the inverse of dateKey', () => {
+    const ts = new Date(2026, 8, 14, 15, 20).getTime();
+    expect(dateStart(dateKey(ts))).toBe(startOfDay(ts));
+  });
+
+  it('parses a padded key', () => {
+    expect(dateStart('2026-01-05')).toBe(new Date(2026, 0, 5).getTime());
+  });
+});
+
+describe('formatClock', () => {
+  it('formats a minute of the day as 24-hour time', () => {
+    expect(formatClock(0)).toBe('00:00');
+    expect(formatClock(845)).toBe('14:05');
+    expect(formatClock(1439)).toBe('23:59');
+  });
+
+  it('clamps out-of-range minutes and floors fractions', () => {
+    expect(formatClock(-10)).toBe('00:00');
+    expect(formatClock(5000)).toBe('23:59');
+    expect(formatClock(90.9)).toBe('01:30');
+  });
+});
+
+describe('formatDayLabel', () => {
+  const now = new Date(2026, 8, 14, 12, 0).getTime();
+
+  it('names today and yesterday', () => {
+    expect(formatDayLabel('2026-09-14', now)).toBe('Today');
+    expect(formatDayLabel('2026-09-13', now)).toBe('Yesterday');
+  });
+
+  it('spells out any other day', () => {
+    const label = formatDayLabel('2026-09-10', now);
+    expect(label).not.toBe('Today');
+    expect(label).not.toBe('Yesterday');
+    expect(label).toContain('Sep');
   });
 });

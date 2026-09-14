@@ -1,8 +1,9 @@
-import type { Rule, RuleView, StateView } from './types';
+import type { ActivityView, Rule, RuleView, StateView } from './types';
 
 /** Requests the UI can send to the background service worker. */
 export type Message =
   | { type: 'getState' }
+  | { type: 'getActivity'; date: string }
   | { type: 'createRule'; input: { pattern: unknown; limitMinutes: unknown } }
   | { type: 'updateRule'; id: string; input: { pattern: unknown; limitMinutes: unknown } }
   | { type: 'deleteRule'; id: string }
@@ -18,6 +19,7 @@ export type RuleViewResult =
 
 export interface ResponseMap {
   getState: StateView;
+  getActivity: ActivityView;
   createRule: RuleResult;
   updateRule: RuleResult;
   deleteRule: { ok: true };
