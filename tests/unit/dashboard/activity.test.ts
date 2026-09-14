@@ -2,14 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadPageBody } from '../../helpers/dom';
 import {
   ACTIVITY_ERROR_TEXT,
+  AXIS_TICKS,
   BLOCK_FAILED_TEXT,
   HOVER_HINT,
+  HOVER_TOLERANCE_MINUTES,
   PALETTE_SIZE,
+  ZOOMED_HINT,
+  ZOOM_MINUTES,
+  axisLabel,
   colourClass,
   createActivityPanel,
+  gridStep,
+  hoverTolerance,
   nearestSlot,
   toRuns,
 } from '../../../src/dashboard/activity';
+import { MINUTES_PER_DAY } from '../../../src/shared/activity';
 import type { Message, ResponseFor } from '../../../src/shared/messages';
 import type { ActivityView, HostTotal, MinuteSlot } from '../../../src/shared/types';
 
@@ -79,6 +87,15 @@ function moveOver(clientX: number): void {
   const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
   chart.dispatchEvent(new MouseEvent('mousemove', { clientX, bubbles: true }));
 }
+
+function clickOver(clientX: number): void {
+  const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
+  chart.dispatchEvent(new MouseEvent('click', { clientX, bubbles: true }));
+}
+
+const axisLabels = () =>
+  Array.from(document.querySelectorAll('#activity-axis span')).map((s) => s.textContent);
+const gridLines = () => Array.from(document.querySelectorAll('.tl-grid'));
 
 describe('colourClass', () => {
   it('gives each of the leading hosts its own series colour', () => {
@@ -524,5 +541,176 @@ describe('activity panel', () => {
     expect(() => createActivityPanel(document, { send: (async () => view()) as never, now: () => NOW })).toThrow(
       'Missing element: #activity-date',
     );
+  });
+});
+
+describe('chart window maths', () => {
+  it('spaces gridlines by the hour across a day and by ten minutes when zoomed', () => {
+    expect(gridStep(MINUTES_PER_DAY)).toBe(60);
+    expect(gridStep(ZOOM_MINUTES)).toBe(10);
+  });
+
+  it('reads the end of the day as 24:00 rather than one minute short of it', () => {
+    expect(axisLabel(0)).toBe('00:00');
+    expect(axisLabel(540)).toBe('09:00');
+    expect(axisLabel(MINUTES_PER_DAY)).toBe('24:00');
+  });
+
+  it('shrinks the hover tolerance with the window, never below a minute', () => {
+    expect(hoverTolerance(MINUTES_PER_DAY)).toBe(HOVER_TOLERANCE_MINUTES);
+    expect(hoverTolerance(ZOOM_MINUTES)).toBe(1);
+  });
+
+  it('honours a tolerance tighter than the default', () => {
+    const slots = [slot(540)];
+    expect(nearestSlot(slots, 545, 1)).toBeNull();
+    expect(nearestSlot(slots, 545)).toEqual(slot(540));
+  });
+});
+
+describe('zooming the day strip', () => {
+  beforeEach(() => {
+    loadPageBody('dashboard.html');
+  });
+
+  async function open() {
+    const mounted = mount();
+    await mounted.panel.load();
+    sizeChart();
+    return mounted;
+  }
+
+  it('opens on the whole day', async () => {
+    await open();
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`0 0 ${MINUTES_PER_DAY} 48`);
+    expect(axisLabels()).toEqual(['00:00', '06:00', '12:00', '18:00', '24:00']);
+    expect(el('activity-zoom-out').hidden).toBe(true);
+    expect(el('activity-hint').textContent).toBe(HOVER_HINT);
+    expect(el('activity-chart').classList.contains('is-zoomed')).toBe(false);
+    // Hourly gridlines, with none drawn on the two edges.
+    expect(gridLines()).toHaveLength(23);
+  });
+
+  it('zooms into the hour that was clicked', async () => {
+    await open();
+
+    clickOver(545);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`540 0 ${ZOOM_MINUTES} 48`);
+    expect(el('activity-zoom-range').textContent).toBe('09:00–10:00');
+    expect(el('activity-zoom-out').hidden).toBe(false);
+    expect(el('activity-chart').classList.contains('is-zoomed')).toBe(true);
+    expect(el('activity-hint').textContent).toBe(ZOOMED_HINT);
+  });
+
+  it('rescales the axis and the gridlines to the zoomed hour', async () => {
+    await open();
+
+    clickOver(545);
+
+    expect(axisLabels()).toEqual(['09:00', '09:15', '09:30', '09:45', '10:00']);
+    // Every ten minutes between the edges: 09:10 through 09:50.
+    expect(gridLines()).toHaveLength(5);
+    expect(gridLines().map((line) => line.getAttribute('x1'))).toEqual([
+      '550',
+      '560',
+      '570',
+      '580',
+      '590',
+    ]);
+  });
+
+  it('keeps bars on absolute clock time and stops padding them out', async () => {
+    await open();
+    // The seeded run is two minutes, below the day view's minimum drawn width.
+    expect(bars()[0]?.getAttribute('x')).toBe('540');
+    expect(bars()[0]?.getAttribute('width')).toBe('4');
+
+    clickOver(545);
+
+    expect(bars()[0]?.getAttribute('x')).toBe('540');
+    expect(bars()[0]?.getAttribute('width')).toBe('2');
+  });
+
+  it('zooms to midnight for a click in the first hour', async () => {
+    await open();
+
+    clickOver(30);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`0 0 ${ZOOM_MINUTES} 48`);
+    expect(el('activity-zoom-range').textContent).toBe('00:00–01:00');
+  });
+
+  it('reads the last hour of the day as ending at 24:00', async () => {
+    await open();
+
+    clickOver(MINUTES_PER_DAY - 1);
+
+    expect(el('activity-zoom-range').textContent).toBe('23:00–24:00');
+    expect(axisLabels()[AXIS_TICKS]).toBe('24:00');
+  });
+
+  it('does not zoom again once zoomed', async () => {
+    await open();
+    clickOver(545);
+
+    clickOver(550);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`540 0 ${ZOOM_MINUTES} 48`);
+  });
+
+  it('ignores a click that lands outside the strip', async () => {
+    await open();
+
+    clickOver(MINUTES_PER_DAY + 40);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`0 0 ${MINUTES_PER_DAY} 48`);
+    expect(el('activity-zoom-out').hidden).toBe(true);
+  });
+
+  it('goes back to the whole day from the chip', async () => {
+    await open();
+    clickOver(545);
+
+    el('activity-zoom-out').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`0 0 ${MINUTES_PER_DAY} 48`);
+    expect(axisLabels()).toEqual(['00:00', '06:00', '12:00', '18:00', '24:00']);
+    expect(el('activity-zoom-out').hidden).toBe(true);
+    expect(el('activity-zoom-range').textContent).toBe('');
+    expect(el('activity-hint').textContent).toBe(HOVER_HINT);
+  });
+
+  it('drops the zoom when another day is loaded', async () => {
+    const { panel } = await open();
+    clickOver(545);
+
+    await panel.load('2026-09-13');
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`0 0 ${MINUTES_PER_DAY} 48`);
+    expect(el('activity-zoom-out').hidden).toBe(true);
+  });
+
+  it('places the tooltip within the zoomed window, not the day', async () => {
+    await open();
+    moveOver(540);
+    expect(el('activity-tooltip').style.left).toBe(`${(540 / MINUTES_PER_DAY) * 100}%`);
+
+    clickOver(545);
+    // 09:00 is the left edge of the 09:00-10:00 window.
+    moveOver(0);
+
+    expect(el('activity-tooltip').hidden).toBe(false);
+    expect(el('activity-tooltip').style.left).toBe('0%');
+  });
+
+  it('will not name a minute that the zoom has pushed off screen', async () => {
+    await open();
+    clickOver(1145); // 19:00-20:00, well away from the seeded 09:00 activity.
+
+    moveOver(30);
+
+    expect(el('activity-tooltip').hidden).toBe(true);
   });
 });

@@ -140,6 +140,12 @@ await page.waitForSelector('[data-testid="activity-tooltip"]:not([hidden])');
 await shot(page, 'activity-hover-dark');
 await page.mouse.move(0, 0);
 
+// Click the same minute to zoom the strip into that hour, then come back out.
+await chart.click({ position: { x: box.width * ((15 * 60 + 25) / 1440), y: box.height / 2 } });
+await page.waitForSelector('[data-testid="activity-zoom-out"]:not([hidden])');
+await shot(page, 'activity-zoom-dark');
+await page.getByTestId('activity-zoom-out').click();
+
 await page.getByTestId('activity-legend-item').nth(1).click();
 await shot(page, 'activity-focus-dark');
 await page.getByTestId('activity-legend-item').nth(1).click();
