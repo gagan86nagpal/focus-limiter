@@ -11,12 +11,14 @@
     "icons": "node scripts/gen-icons.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
     "diagrams": "node scripts/diagrams.mjs",
+    "demo": "node scripts/build-demo.mjs",
+    "demo:serve": "node scripts/build-demo.mjs && npx --yes http-server dist-demo -p 4173 -c-1",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "vitest run --coverage",
     "test:unit:watch": "vitest",
-    "test:e2e": "npm run build && playwright test",
-    "test:e2e:headed": "npm run build && playwright test --headed"
+    "test:e2e": "npm run build && npm run demo && playwright test",
+    "test:e2e:headed": "npm run build && npm run demo && playwright test --headed"
   },
   "license": "MIT",
   "devDependencies": {

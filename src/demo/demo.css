@@ -1,0 +1,42 @@
+/* Demo-only chrome, loaded after styles.css so the extension never ships these rules. */
+
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-muted);
+}
+
+.demo-banner-copy {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.demo-banner-lead {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.demo-banner .btn {
+  flex: none;
+  text-decoration: none;
+  /* An anchor styled as a button needs the centring a <button> gets for free. */
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 600px) {
+  .demo-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
