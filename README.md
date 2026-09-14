@@ -11,19 +11,23 @@ extension asks for no network permissions at all.
 The npm package / repository is named **`chrome-site-blocker`**; the product is
 **Focus Limiter**.
 
-## Try it without installing
+## Try it in your browser
 
 **[gagan86nagpal.github.io/focus-limiter](https://gagan86nagpal.github.io/focus-limiter/)**
 
-That is the real dashboard, not a slideshow of it. The demo replaces one thing —
-the transport that normally carries a message to the service worker — with an
-in-memory Chrome, so the page runs the extension's own tracker, validation and
-activity maths against a generated month of browsing. Switch tabs, hover the
-day strip, pin a site, create a rule, walk back through the history.
+The product page carries a working copy of the extension, and nothing to install
+to use it. Its **Product demo** tab is the real dashboard *and* the real "limit
+reached" page, running on a generated month of browsing: switch between rules and
+activity, hover the day strip, pin a site, create a rule — then spend the YouTube
+budget, take five more minutes, and watch the limit move on both screens at once.
+The **Install** tab is the same four steps as [below](#install).
 
-Because it is the shipped code rather than a copy of it, the demo cannot drift
-from the extension; if the dashboard changes, the demo changes with it or the
-build fails.
+Only one thing is substituted: the transport that normally carries a message to
+the service worker is replaced by an in-memory Chrome. Everything else is the
+shipped code, so the page runs the extension's own tracker, validation, and
+activity maths. That also means the demo cannot drift from the extension — the
+page is assembled out of `public/dashboard.html` and `public/blocked.html` at
+build time, and the build fails if that markup moves.
 
 ## Features
 
@@ -83,7 +87,7 @@ src/
   background/      Service worker: storage, the tracker core, event wiring
   dashboard/       Dashboard UI logic
   blocked/         Blocked-page UI logic
-  demo/            Faked Chrome, generated fixtures, and entry point for the Pages demo
+  demo/            The product site: faked Chrome, generated fixtures, page shell and copy
 tests/
   unit/            Vitest unit tests (100% coverage)
   e2e/             Playwright end-to-end tests (real Chromium + extension)
@@ -92,7 +96,8 @@ scripts/
   gen-icons.mjs    Dependency-free PNG icon generator
   screenshots.mjs  Regenerates the product screenshots in docs/PRODUCT.md
   diagrams.mjs     Regenerates the architecture diagrams
-  build-demo.mjs   Builds the Pages demo from the dashboard's own markup
+  demo-html.mjs    Assembles the site's page from the extension's own markup
+  build-demo.mjs   Writes that page into dist-demo/ with its assets and bundle
 docs/
   PRODUCT.md       Every user flow, with screenshots
   screenshots/     Product screenshots
@@ -101,6 +106,11 @@ build.mjs          esbuild bundler
 ```
 
 ## Install
+
+Not on the Chrome Web Store yet, so it loads unpacked from a local build. These
+steps are also on the site's
+[Install tab](https://gagan86nagpal.github.io/focus-limiter/) if you would rather
+read them there.
 
 ```bash
 git clone https://github.com/gagan86nagpal/focus-limiter.git
@@ -163,19 +173,23 @@ npm run diagrams     # re-render the swimlane diagrams
 Both write into `docs/`, so a change to the UI or the architecture shows up as a
 reviewable diff rather than a stale picture.
 
-## Running the demo locally
+## Running the site locally
 
 ```bash
-npm run demo         # build the static demo into dist-demo/
+npm run demo         # build the static site into dist-demo/
 npm run demo:serve   # build it, then serve it on http://localhost:4173
 ```
 
-`dist-demo/index.html` is generated from `public/dashboard.html` rather than
-copied, and the build fails loudly if the markup it edits has moved — which is
-what stops the demo and the dashboard from diverging in silence.
+`dist-demo/index.html` is assembled, not written by hand: `scripts/demo-html.mjs`
+lifts the dashboard out of `public/dashboard.html` and the limit-reached screen
+out of `public/blocked.html`, and drops them into the page shell in
+`src/demo/shell.html`. Every lift asserts the markup it depends on, so moving that
+markup fails the build instead of publishing a page with a hole in it. The unit
+tests assemble the same page, which is what keeps the site's wiring and its
+published markup honest with each other.
 
 Pushing to `main` publishes it, but only after `npx playwright test demo` passes
-against the built output, so a demo that does not work is never deployed.
+against the built output, so a site that does not work is never deployed.
 
 ## Testing
 

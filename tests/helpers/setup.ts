@@ -9,6 +9,13 @@ if (typeof globalThis.crypto?.randomUUID !== 'function') {
   });
 }
 
+// jsdom has no layout, so it ships no scrollIntoView; the demo site calls it on tab changes.
+if (typeof Element.prototype.scrollIntoView !== 'function') {
+  Element.prototype.scrollIntoView = function scrollIntoView() {
+    return undefined;
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();

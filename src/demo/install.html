@@ -1,0 +1,60 @@
+<section class="install" aria-labelledby="install-title">
+  <h2 class="install-title" id="install-title">Install Focus Limiter</h2>
+  <p class="install-lead">
+    It isn't on the Chrome Web Store yet, so it installs from source as an unpacked extension.
+    That takes about a minute and needs <a class="link" href="https://nodejs.org">Node</a> 20 or
+    newer. Chrome keeps unpacked extensions across restarts, so this is a one-time job.
+  </p>
+
+  <ol class="install-steps">
+    <li class="install-step">
+      <h3 class="install-step-title">Clone the repository</h3>
+      <pre class="install-code" data-testid="install-clone"><code>git clone https://github.com/gagan86nagpal/focus-limiter.git
+cd focus-limiter</code></pre>
+    </li>
+
+    <li class="install-step">
+      <h3 class="install-step-title">Install dependencies and build</h3>
+      <pre class="install-code" data-testid="install-build"><code>npm install
+npm run build</code></pre>
+      <p class="install-step-copy">
+        This writes the loadable extension into <code class="code-inline">dist/</code>. Leave it
+        where it is — Chrome loads it from that folder rather than copying it.
+      </p>
+    </li>
+
+    <li class="install-step">
+      <h3 class="install-step-title">Load it into Chrome</h3>
+      <p class="install-step-copy">
+        Open <code class="code-inline">chrome://extensions</code>, turn on
+        <strong>Developer mode</strong> with the switch in the top right, click
+        <strong>Load unpacked</strong>, and select the <code class="code-inline">dist/</code>
+        folder you just built.
+      </p>
+    </li>
+
+    <li class="install-step">
+      <h3 class="install-step-title">Set your first limit</h3>
+      <p class="install-step-copy">
+        Click the Focus Limiter icon in the toolbar to open the dashboard, then add a rule — a URL
+        pattern and a number of minutes. That is the whole setup. It is the same dashboard you just
+        used on the demo tab.
+      </p>
+    </li>
+  </ol>
+
+  <h3 class="install-subtitle">Keeping it up to date</h3>
+  <p class="install-copy">
+    Because Chrome reads the folder on disk, updating is
+    <code class="code-inline">git pull &amp;&amp; npm run build</code>, then the reload arrow on the
+    extension's card in <code class="code-inline">chrome://extensions</code>. Your rules and
+    history live in Chrome's own storage and survive the rebuild.
+  </p>
+
+  <h3 class="install-subtitle">What it can see</h3>
+  <p class="install-copy">
+    Focus Limiter asks for no network permission and has no server to talk to. Times and patterns
+    stay in your browser's local storage, activity is kept for 30 days and then rolls off, and the
+    extension is about two thousand lines of TypeScript you can read in an afternoon.
+  </p>
+</section>

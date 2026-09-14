@@ -18,12 +18,14 @@
     <main class="blocked">
       <p class="brand-small">Focus Limiter</p>
       <h1 class="blocked-title" id="title" data-testid="blocked-title">Daily limit reached</h1>
-      <p class="blocked-pattern" id="pattern" data-testid="blocked-pattern"></p>
+      <!-- Ids are prefixed so this page can be embedded alongside the dashboard on the demo
+           site, whose rule dialog owns plain #pattern and #limit. -->
+      <p class="blocked-pattern" id="blocked-pattern" data-testid="blocked-pattern"></p>
 
       <p class="blocked-usage" id="usage" data-testid="blocked-usage">
         <span id="used" data-testid="blocked-used"></span>
         <span class="blocked-usage-sep">/</span>
-        <span id="limit" data-testid="blocked-limit"></span>
+        <span id="blocked-limit" data-testid="blocked-limit"></span>
       </p>
 
       <p class="blocked-copy" id="message" data-testid="blocked-message"></p>
