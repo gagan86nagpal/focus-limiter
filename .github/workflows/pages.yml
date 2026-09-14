@@ -1,0 +1,79 @@
+name: Demo
+
+# Publishes the interactive demo to GitHub Pages.
+#
+# Requires Pages to be enabled once, with Settings -> Pages -> Source set to "GitHub Actions".
+# Until that is done this job fails at the Configure step while everything else stays green.
+
+on:
+  push:
+    branches: [main]
+  # Allows a redeploy without a commit, e.g. straight after enabling Pages.
+  workflow_dispatch:
+
+# The demo is built from the dashboard, so a broken build should not be published. Queue
+# deployments rather than cancelling: a half-finished deploy is worse than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build the demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the demo
+        run: npm run demo
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # The demo runs the dashboard against a faked Chrome, so it can break in ways the
+      # extension's own tests would not notice. Never publish a demo that does not work.
+      - name: Verify the built demo
+        run: npx playwright test demo
+
+      # `enablement` turns Pages on for the repository if it is off, so this does not need a
+      # visit to the settings page first. If the API refuses, set Settings -> Pages -> Source
+      # to "GitHub Actions" by hand and re-run.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-demo
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
