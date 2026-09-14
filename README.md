@@ -96,6 +96,29 @@ End-to-end tests load the built extension into a headless Chromium via a
 persistent context and drive the real dashboard, blocked page, and — using a
 throwaway local HTTP server — the actual redirect enforcement.
 
+## Quality gates
+
+Tests run at three layers, each with an escape hatch ("breakglass"):
+
+| Layer | When | Runs | Breakglass |
+|-------|------|------|------------|
+| `pre-commit` hook | Every local commit | Type check + unit tests (100% coverage) | `git commit --no-verify` |
+| `pre-push` hook | Every local push | Full suite: type check + unit + e2e | `git push --no-verify` |
+| GitHub Actions CI | Every push / pull request to `main` | Full suite on a clean runner | Re-run, or an admin override |
+
+The hooks live in `.githooks/` and are enabled automatically by the `prepare`
+script on `npm install`. To enable them manually:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+**Blocking merges on GitHub.** A commit is created locally, so GitHub cannot
+reject the commit itself — the `pre-commit` hook does that. To make GitHub
+*reject a merge* when tests fail, enable branch protection on `main` and mark the
+CI check as required (Settings → Branches → Add rule → "Require status checks to
+pass"). Repository admins can then bypass it as the breakglass.
+
 ## License
 
 MIT
