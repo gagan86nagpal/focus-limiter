@@ -1,5 +1,5 @@
 import { dateKey } from '../shared/time';
-import type { ActivityDay, Rule, RuntimeState, StoredData, UsageDay } from '../shared/types';
+import type { ActivityDay, Presence, Rule, RuntimeState, StoredData, UsageDay } from '../shared/types';
 
 export function emptyUsage(now: number): UsageDay {
   return { date: dateKey(now), seconds: {} };
@@ -44,14 +44,18 @@ export async function saveActivity(days: ActivityDay[]): Promise<void> {
 
 /** Volatile state lives in storage.session so it survives worker restarts but not browser restarts. */
 export async function loadRuntime(): Promise<RuntimeState> {
-  const raw = await chrome.storage.session.get(['session', 'focused', 'idle']);
+  const raw = await chrome.storage.session.get(['session', 'focused', 'presence']);
   return {
     session: (raw['session'] as RuntimeState['session'] | undefined) ?? null,
     focused: (raw['focused'] as boolean | undefined) ?? true,
-    idle: (raw['idle'] as boolean | undefined) ?? false,
+    presence: (raw['presence'] as Presence | undefined) ?? 'active',
   };
 }
 
 export async function saveRuntime(state: RuntimeState): Promise<void> {
-  await chrome.storage.session.set({ session: state.session, focused: state.focused, idle: state.idle });
+  await chrome.storage.session.set({
+    session: state.session,
+    focused: state.focused,
+    presence: state.presence,
+  });
 }

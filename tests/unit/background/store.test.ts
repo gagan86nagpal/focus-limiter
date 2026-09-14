@@ -90,12 +90,12 @@ describe('background store', () => {
   });
 
   it('loadRuntime returns defaults when nothing is stored', async () => {
-    expect(await loadRuntime()).toEqual({ session: null, focused: true, idle: false });
+    expect(await loadRuntime()).toEqual({ session: null, focused: true, presence: 'active' });
   });
 
   it('saveRuntime round-trips the runtime state', async () => {
     const session = { tabId: 3, url: 'https://x.com', ruleIds: ['r1'], startedAt: NOW };
-    await saveRuntime({ session, focused: false, idle: true });
-    expect(await loadRuntime()).toEqual({ session, focused: false, idle: true });
+    await saveRuntime({ session, focused: false, presence: 'locked' });
+    expect(await loadRuntime()).toEqual({ session, focused: false, presence: 'locked' });
   });
 });

@@ -20,7 +20,7 @@ describe('background entry', () => {
       start: vi.fn(),
       reconcile: vi.fn(),
       setFocused: vi.fn(),
-      setIdle: vi.fn(),
+      setPresence: vi.fn(),
       getState: vi.fn(async () => ({ rules: [], maxRules: 10 })),
       createRule: vi.fn(),
       updateRule: vi.fn(),
@@ -50,11 +50,14 @@ describe('background entry', () => {
     expect(setFocused).toHaveBeenNthCalledWith(1, true);
     expect(setFocused).toHaveBeenNthCalledWith(2, false);
 
-    const setIdle = (tracker as { setIdle: ReturnType<typeof vi.fn> }).setIdle;
+    const setPresence = (tracker as { setPresence: ReturnType<typeof vi.fn> }).setPresence;
     chromeMock.idle.onStateChanged.emit('idle');
+    chromeMock.idle.onStateChanged.emit('locked');
     chromeMock.idle.onStateChanged.emit('active');
-    expect(setIdle).toHaveBeenNthCalledWith(1, true);
-    expect(setIdle).toHaveBeenNthCalledWith(2, false);
+    // Forwarded verbatim: the tracker needs to tell a locked screen from a quiet keyboard.
+    expect(setPresence).toHaveBeenNthCalledWith(1, 'idle');
+    expect(setPresence).toHaveBeenNthCalledWith(2, 'locked');
+    expect(setPresence).toHaveBeenNthCalledWith(3, 'active');
 
     const reconcileCount = reconcile.mock.calls.length;
     chromeMock.alarms.onAlarm.emit({ name: 'focus-limiter:enforce' } as chrome.alarms.Alarm);

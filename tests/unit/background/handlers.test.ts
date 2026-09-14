@@ -7,7 +7,7 @@ function stubTracker(): Tracker {
     start: vi.fn(),
     reconcile: vi.fn(),
     setFocused: vi.fn(),
-    setIdle: vi.fn(),
+    setPresence: vi.fn(),
     getState: vi.fn(async () => ({ rules: [], maxRules: 10 })),
     getActivity: vi.fn(async () => ({ date: '2026-09-14' })),
     createRule: vi.fn(async () => ({ ok: true, rule: { id: 'r', pattern: 'x', limitMinutes: 5, createdAt: 0 } })),

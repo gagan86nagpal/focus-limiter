@@ -125,7 +125,11 @@ Volatile runtime flags, held in session storage.
 |-------|------|-------|
 | `session` | `Session \| null` | Null when nothing is being tracked |
 | `focused` | `boolean` | Whether a browser window is focused |
-| `idle` | `boolean` | Whether the user is idle/locked |
+| `presence` | `'active' \| 'idle' \| 'locked'` | Reported by `chrome.idle`, stored verbatim |
+
+`presence` keeps Chrome's own wording rather than reducing it to a boolean,
+because the two non-active states deserve different answers. See
+[Deciding the user is away](#deciding-the-user-is-away).
 
 ## DTOs
 
@@ -187,7 +191,7 @@ the "Common sites" quick-add chips in the rule dialog and is not persisted.
 |-------|------|----------|----------|
 | `chrome.storage.local` | `rules`, `usage` | `Rule[]`, `UsageDay` | Durable |
 | `chrome.storage.local` | `activity` | `ActivityDay[]` | Rolling 30 days |
-| `chrome.storage.session` | `session`, `focused`, `idle` | `RuntimeState` | Cleared on browser restart |
+| `chrome.storage.session` | `session`, `focused`, `presence` | `RuntimeState` | Cleared on browser restart |
 
 On read, usage from a previous calendar day is discarded and replaced with an
 empty `UsageDay` — that is the daily reset. All writes go through the worker's
@@ -208,11 +212,11 @@ entries.
 ## The reconcile step
 
 Every meaningful Chrome event (tab activated, URL changed, tab removed, window
-focus changed, idle state changed, alarm fired) triggers one serialized
+focus changed, presence changed, alarm fired) triggers one serialized
 `reconcile`:
 
 1. Fold the previous session's elapsed time into `UsageDay`.
-2. Inspect the focused, non-idle tab.
+2. Inspect the focused tab, unless the user is away.
    - If a matching rule is already exhausted, redirect the tab to `blocked.html`.
    - Else start a `Session` for any trackable page. If rules match, set a
      deadline at the smallest remaining budget and arm an alarm plus a 1-second
@@ -224,6 +228,36 @@ focus changed, idle state changed, alarm fired) triggers one serialized
 The ticker only runs while a deadline is armed. Sessions now exist for ordinary
 browsing too, so tying the ticker to "a session exists" would have meant polling
 every second all day for no reason.
+
+## Deciding the user is away
+
+Step 2 stops the clock when the user is away, and what counts as away needs
+care, because `chrome.idle` does not measure what it appears to.
+
+It reports input to the **whole machine**, not attention to the browser. A
+minute of watching a video therefore looks identical to a minute of having left
+the room: no key is pressed and no mouse moves either way. Treating that alone
+as away switched the limiter off during exactly the browsing it exists to limit,
+and the error ran in the dangerous direction — time went uncounted, so no limit
+ever tripped and the activity chart under-reported video.
+
+`isAway` in `tracker.ts` therefore splits the two non-active states:
+
+| `presence` | Tab is silent | Tab is audible |
+|-----------|---------------|----------------|
+| `active` | Counting | Counting |
+| `idle` | Away | **Counting** |
+| `locked` | Away | Away |
+
+A locked screen is unambiguous, so it always stops the clock. Plain idleness
+only does when the tab is making no sound, which keeps media accruing while a
+genuinely abandoned tab still stops. This is why the tab is fetched before the
+away check rather than after it — whether it is audible is an input to the
+decision.
+
+The remaining gap is a muted video, which still reads as away. Closing it would
+mean asking the page about playback rather than trusting the audio flag, and
+that needs a content script the extension does not otherwise want.
 
 ## User flows
 
