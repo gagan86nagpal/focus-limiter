@@ -45,21 +45,24 @@ scripts/
 build.mjs          esbuild bundler
 ```
 
-## Getting started
+## Install
 
 ```bash
-npm install
-npm run icons     # generate the PNG icons (already committed)
-npm run build     # bundle into dist/
+git clone https://github.com/gagan86nagpal/focus-limiter.git
+cd focus-limiter && npm install
+npm run build
 ```
 
-Then load it in Chrome:
+### Load it into Chrome
 
 1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
+2. Turn on **Developer mode** (top-right toggle).
 3. Click **Load unpacked** and select the `dist/` directory.
 
-`npm run dev` rebuilds on change.
+Focus Limiter now appears in your extensions. Open its options page to add rules.
+Run `npm run dev` to rebuild on change while developing.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for entities, DTOs, and user flows.
 
 ## How it works
 
