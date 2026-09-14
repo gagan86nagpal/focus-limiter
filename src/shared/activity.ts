@@ -6,6 +6,7 @@ import type {
   ActivityView,
   HostTotal,
   MinuteSlot,
+  PeakHour,
   Rule,
   Session,
 } from './types';
@@ -242,12 +243,21 @@ export function coveredSeconds(segments: ActivitySegment[], rules: Rule[]): numb
   return totalSeconds(segments.filter((segment) => rules.some((rule) => ruleMatches(rule, segment.url))));
 }
 
-function peakOf(minutes: MinuteSlot[]): number | null {
-  let peak: MinuteSlot | null = null;
-  for (const slot of minutes) {
-    if (peak === null || slot.activeSeconds > peak.activeSeconds) peak = slot;
+/**
+ * The hour of the day with the most time on screen, or null on a day with nothing in it.
+ *
+ * This used to pick the busiest *minute*, which sounded sharper but said very little: a minute
+ * holds at most sixty seconds, so any unbroken sitting produces a long run of minutes tied at
+ * the top and the reading collapsed to whenever you first sat still for a whole minute. Hours
+ * are wide enough to actually differ from one another.
+ */
+export function peakHourOf(hourly: number[]): PeakHour | null {
+  let peak: PeakHour | null = null;
+  for (const [hour, seconds] of hourly.entries()) {
+    // Strictly greater, so a tie keeps the earlier hour rather than drifting later.
+    if (seconds > (peak?.seconds ?? 0)) peak = { hour, seconds };
   }
-  return peak === null ? null : peak.minute;
+  return peak;
 }
 
 /** Assembles everything the activity tab needs for one day. */
@@ -259,6 +269,7 @@ export function buildActivityView(
 ): ActivityView {
   const segments = days.find((day) => day.date === date)?.segments ?? [];
   const minutes = toMinuteSlots(segments, date);
+  const hourly = toHourly(segments, date);
   return {
     date,
     minDate: dateKey(shiftDays(now, -(RETENTION_DAYS - 1))),
@@ -266,8 +277,8 @@ export function buildActivityView(
     totalSeconds: totalSeconds(segments),
     coveredSeconds: coveredSeconds(segments, rules),
     hostCount: new Set(segments.map((segment) => segment.host)).size,
-    peakMinute: peakOf(minutes),
-    hourly: toHourly(segments, date),
+    peak: peakHourOf(hourly),
+    hourly,
     minutes,
     top: toHostTotals(segments, rules, date),
     datesWithData: days.filter((day) => day.segments.length > 0).map((day) => day.date),

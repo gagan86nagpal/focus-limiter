@@ -230,9 +230,14 @@ test('taking five more minutes moves the limit on the rules tab too', async ({ p
 
   await page.getByTestId('extend-5').click();
 
+  // Choosing is not spending: the rule card is untouched until Continue.
+  await expect(page.getByTestId('blocked-limit')).toHaveText('25m');
+  await expect(card.getByTestId('rule-limit')).toHaveText('25m');
+
+  await page.getByTestId('continue').click();
+
   await expect(page.getByTestId('blocked-title')).toHaveText('Limit increased');
   await expect(page.getByTestId('blocked-limit')).toHaveText('30m');
-  await expect(page.getByTestId('continue')).toBeEnabled();
 
   // Both screens read the same store, so the card above has already caught up.
   await expect(card.getByTestId('rule-limit')).toHaveText('30m');
@@ -250,7 +255,9 @@ test('checks a custom number of extra minutes before taking it', async ({ page }
 
   await page.getByTestId('custom-minutes').fill('12');
   await page.getByTestId('extend-custom-submit').click();
+  await expect(page.getByTestId('continue')).toHaveText('Add 12 min and continue');
 
+  await page.getByTestId('continue').click();
   await expect(page.getByTestId('blocked-limit')).toHaveText('37m');
 });
 

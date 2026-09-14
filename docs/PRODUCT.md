@@ -16,8 +16,8 @@ Every screen here is the real extension, photographed in dark mode by
 ## Where the day went
 
 The **Activity** tab opens on today. Four figures summarise it: time actually
-spent looking at pages, how many sites that was spread across, the busiest
-minute, and how much of the day is already under a limit you set.
+spent looking at pages, how many sites that was spread across, the hour that
+took the most, and how much of the day is already under a limit you set.
 
 Underneath is the day itself — a 24-hour strip where each block is an unbroken
 stretch on one site, coloured to match the list below. Empty stretches are time
@@ -94,10 +94,12 @@ more time.
 ## Deciding to spend more
 
 If you do want more, +5 and +10 are one click, or type any number of minutes.
-The limit changes, **Continue** wakes up, and it takes you back to the page you
-were on. Tracking picks up where it left off.
+Choosing an amount only marks it: the limit does not move and **Continue** says
+what it is about to do. Pressing it spends the minutes and takes you back to the
+page you were on, in one step. Nothing is charged if you change your mind and
+close the tab instead.
 
-![Limit extended](screenshots/blocked-extended-dark.png)
+![Five more minutes chosen](screenshots/blocked-chosen-dark.png)
 
 ---
 

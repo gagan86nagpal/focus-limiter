@@ -72,7 +72,8 @@ const YESTERDAY = [
 const shots = [];
 async function shot(target, name) {
   const file = path.join(outDir, `${name}.png`);
-  await target.screenshot({ path: file });
+  // Settle the blocked page's entrance, so a shot cannot catch the card mid-pop.
+  await target.screenshot({ path: file, animations: 'disabled' });
   shots.push(name);
   console.log(`  ${name}.png`);
 }
@@ -173,9 +174,11 @@ await blocked.goto(blockedUrl);
 await blocked.waitForSelector('[data-testid="blocked-title"]');
 await shot(blocked, 'blocked-dark');
 
+// Choosing five more minutes. Continue is not pressed, since spending them would navigate away
+// to a site that is not there.
 await blocked.getByTestId('extend-5').click();
 await blocked.waitForSelector('[data-testid="continue"]:not([disabled])');
-await shot(blocked, 'blocked-extended-dark');
+await shot(blocked, 'blocked-chosen-dark');
 
 await context.close();
 fs.rmSync(userDataDir, { recursive: true, force: true });

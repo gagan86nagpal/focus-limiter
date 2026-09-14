@@ -32,7 +32,7 @@ describe('dashboard entry', () => {
       totalSeconds: 0,
       coveredSeconds: 0,
       hostCount: 0,
-      peakMinute: null,
+      peak: null,
       hourly: Array.from({ length: 24 }, () => 0),
       minutes: [],
       top: [],
@@ -65,7 +65,7 @@ describe('dashboard entry', () => {
       totalSeconds: 600,
       coveredSeconds: 0,
       hostCount: 1,
-      peakMinute: 540,
+      peak: { hour: 9, seconds: 1800 },
       hourly: Array.from({ length: 24 }, () => 0),
       minutes: [{ minute: 540, activeSeconds: 60, host: 'x.com' }],
       top: [

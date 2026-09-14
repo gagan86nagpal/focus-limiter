@@ -473,7 +473,7 @@ describe('getActivity', () => {
   it('returns an empty day for a date with no history', async () => {
     setActiveTab(null);
     const view = await tracker.getActivity('2026-09-01');
-    expect(view).toMatchObject({ date: '2026-09-01', totalSeconds: 0, hostCount: 0, peakMinute: null });
+    expect(view).toMatchObject({ date: '2026-09-01', totalSeconds: 0, hostCount: 0, peak: null });
     expect(view.top).toEqual([]);
   });
 });
