@@ -11,6 +11,20 @@ extension asks for no network permissions at all.
 The npm package / repository is named **`chrome-site-blocker`**; the product is
 **Focus Limiter**.
 
+## Try it without installing
+
+**[gagan86nagpal.github.io/focus-limiter](https://gagan86nagpal.github.io/focus-limiter/)**
+
+That is the real dashboard, not a slideshow of it. The demo replaces one thing —
+the transport that normally carries a message to the service worker — with an
+in-memory Chrome, so the page runs the extension's own tracker, validation and
+activity maths against a generated month of browsing. Switch tabs, hover the
+day strip, pin a site, create a rule, walk back through the history.
+
+Because it is the shipped code rather than a copy of it, the demo cannot drift
+from the extension; if the dashboard changes, the demo changes with it or the
+build fails.
+
 ## Features
 
 - **Activity tracking.** Every page you look at is recorded with a start and end
@@ -138,6 +152,7 @@ src/
   background/      Service worker: storage, the tracker core, event wiring
   dashboard/       Dashboard UI logic
   blocked/         Blocked-page UI logic
+  demo/            Faked Chrome, generated fixtures, and entry point for the Pages demo
 tests/
   unit/            Vitest unit tests (100% coverage)
   e2e/             Playwright end-to-end tests (real Chromium + extension)
@@ -146,6 +161,7 @@ scripts/
   gen-icons.mjs    Dependency-free PNG icon generator
   screenshots.mjs  Regenerates the product screenshots in this README
   diagrams.mjs     Regenerates the architecture diagrams
+  build-demo.mjs   Builds the Pages demo from the dashboard's own markup
 docs/
   screenshots/     Product screenshots
   architecture/    Swimlane diagrams
@@ -214,12 +230,27 @@ npm run diagrams     # re-render the swimlane diagrams
 Both write into `docs/`, so a change to the UI or the architecture shows up as a
 reviewable diff rather than a stale picture.
 
+## Running the demo locally
+
+```bash
+npm run demo         # build the static demo into dist-demo/
+npm run demo:serve   # build it, then serve it on http://localhost:4173
+```
+
+`dist-demo/index.html` is generated from `public/dashboard.html` rather than
+copied, and the build fails loudly if the markup it edits has moved — which is
+what stops the demo and the dashboard from diverging in silence.
+
+Pushing to `main` publishes it, but only after `npx playwright test demo` passes
+against the built output, so a demo that does not work is never deployed.
+
 ## Testing
 
 ```bash
 npm run test         # unit (with coverage) then e2e
 npm run test:unit    # Vitest, enforces 100% coverage on all metrics
 npm run test:e2e     # Playwright against a real Chromium + the built extension
+                     # (also builds and exercises the Pages demo)
 npm run typecheck    # tsc --noEmit
 ```
 
