@@ -13,6 +13,11 @@
   --color-danger: #b3261e;
   --color-danger-soft: #fbeceb;
   --color-success: #0e7a3f;
+  --color-on-solid: #ffffff;
+  --color-primary-hover: #2b2b2b;
+  --color-primary-active: #444444;
+  --color-secondary-hover: #e2e2e2;
+  --color-danger-hover: #9a1f18;
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
@@ -34,6 +39,29 @@
   --control-height-sm: 36px;
 
   --transition: 120ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-bg: #111111;
+    --color-surface: #181818;
+    --color-surface-muted: #202020;
+    --color-surface-strong: #2c2c2c;
+    --color-text: #f5f5f5;
+    --color-text-secondary: #b8b8b8;
+    --color-text-tertiary: #858585;
+    --color-border: #383838;
+    --color-accent: #7aa2ff;
+    --color-danger: #ff8a82;
+    --color-danger-soft: #3a1d1b;
+    --color-success: #66d697;
+    --color-on-solid: #111111;
+    --color-primary-hover: #dddddd;
+    --color-primary-active: #c7c7c7;
+    --color-secondary-hover: #3a3a3a;
+    --color-danger-hover: #ffaaa4;
+  }
 }
 
 *,
@@ -169,19 +197,19 @@ button {
 
 .btn-primary {
   background: var(--color-text);
-  color: #ffffff;
+  color: var(--color-on-solid);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: #2b2b2b;
+  background: var(--color-primary-hover);
 }
 
 .btn-primary:active:not(:disabled) {
-  background: #444444;
+  background: var(--color-primary-active);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: #e2e2e2;
+  background: var(--color-secondary-hover);
 }
 
 .btn-ghost {
@@ -195,11 +223,11 @@ button {
 
 .btn-danger {
   background: var(--color-danger);
-  color: #ffffff;
+  color: var(--color-on-solid);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: #9a1f18;
+  background: var(--color-danger-hover);
 }
 
 .btn-sm {
@@ -611,6 +639,43 @@ button {
   gap: var(--space-3);
 }
 
+.extend-custom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.extend-custom-prefix,
+.extend-custom-suffix {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.extend-custom-input {
+  width: 112px;
+  text-align: center;
+}
+
+.extend-custom-error {
+  min-height: 1.25em;
+  margin-top: var(--space-2);
+  text-align: center;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .page-blocked #continue {
   margin-top: var(--space-6);
 }
@@ -642,5 +707,9 @@ button {
 
   .blocked-title {
     font-size: 32px;
+  }
+
+  .extend-custom {
+    flex-wrap: wrap;
   }
 }

@@ -137,10 +137,57 @@ describe('blocked page', () => {
     expect(byId('limit').textContent).toBe('15m');
   });
 
+  it('extends by a custom whole number of minutes', async () => {
+    const h = setup();
+    await h.page.load();
+    byId<HTMLInputElement>('custom-minutes').value = '2';
+    byId<HTMLFormElement>('extend-custom').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 2 });
+    expect(byId('limit').textContent).toBe('7m');
+    expect(byId<HTMLInputElement>('custom-minutes').value).toBe('');
+  });
+
+  it.each(['1.5', '0', String(MAX_LIMIT_MINUTES)])(
+    'rejects invalid custom minutes: %s',
+    async (value) => {
+      const h = setup();
+      await h.page.load();
+      const input = byId<HTMLInputElement>('custom-minutes');
+      input.value = value;
+      byId<HTMLFormElement>('extend-custom').dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      );
+      expect(h.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'extendLimit' }));
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(byId('custom-minutes-error').textContent).toBe(
+        TEXT.customMinutesError(MAX_LIMIT_MINUTES - 5),
+      );
+
+      input.dispatchEvent(new Event('input'));
+      expect(input.hasAttribute('aria-invalid')).toBe(false);
+      expect(byId('custom-minutes-error').textContent).toBe('');
+    },
+  );
+
+  it('does not submit a custom extension after the rule disappears', async () => {
+    const h = setup({ rule: null });
+    await h.page.load();
+    byId<HTMLInputElement>('custom-minutes').value = '1';
+    byId<HTMLFormElement>('extend-custom').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true }),
+    );
+    expect(h.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'extendLimit' }));
+  });
+
   it('disables extend buttons and hints when at the maximum limit', async () => {
     const h = setup({ rule: ruleView({ limitMinutes: MAX_LIMIT_MINUTES, usedSeconds: 60, limitReached: false }) });
     await h.page.load();
     expect(byId<HTMLButtonElement>('extend-5').disabled).toBe(true);
+    expect(byId<HTMLInputElement>('custom-minutes').disabled).toBe(true);
+    expect(byId<HTMLButtonElement>('extend-custom-submit').disabled).toBe(true);
     expect(byId('hint').textContent).toBe(TEXT.maxHint);
   });
 

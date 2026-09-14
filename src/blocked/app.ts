@@ -25,6 +25,7 @@ export const TEXT = {
   errorTitle: 'Something went wrong',
   errorMessage: "Couldn't reach Focus Limiter. Try reloading this page.",
   maxHint: `Limits can't exceed ${formatLimit(MAX_LIMIT_MINUTES)} per day.`,
+  customMinutesError: (maximum: number) => `Enter a whole number from 1 to ${maximum}.`,
 } as const;
 
 export const DASHBOARD_PAGE = 'dashboard.html';
@@ -49,6 +50,10 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
     message: q<HTMLElement>(root, '#message'),
     extend: q<HTMLElement>(root, '#extend'),
     extendButtons: Array.from(root.querySelectorAll<HTMLButtonElement>('[data-extend]')),
+    customForm: q<HTMLFormElement>(root, '#extend-custom'),
+    customInput: q<HTMLInputElement>(root, '#custom-minutes'),
+    customSubmit: q<HTMLButtonElement>(root, '#extend-custom-submit'),
+    customError: q<HTMLElement>(root, '#custom-minutes-error'),
     continueButton: q<HTMLButtonElement>(root, '#continue'),
     hint: q<HTMLElement>(root, '#hint'),
   };
@@ -73,6 +78,7 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
     }
     const remaining = rule.limitMinutes * 60 - rule.usedSeconds;
     const atMax = rule.limitMinutes >= MAX_LIMIT_MINUTES;
+    const maximumExtension = MAX_LIMIT_MINUTES - rule.limitMinutes;
 
     els.pattern.textContent = rule.pattern;
     els.usage.hidden = false;
@@ -80,6 +86,9 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
     els.used.textContent = formatUsage(rule.usedSeconds);
     els.limit.textContent = formatLimit(rule.limitMinutes);
     for (const button of els.extendButtons) button.disabled = atMax;
+    els.customInput.disabled = atMax;
+    els.customInput.max = String(maximumExtension);
+    els.customSubmit.disabled = atMax;
 
     if (rule.limitReached) {
       els.title.textContent = TEXT.reachedTitle;
@@ -106,15 +115,33 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
 
   async function extend(minutes: number): Promise<void> {
     for (const button of els.extendButtons) button.disabled = true;
+    els.customInput.disabled = true;
+    els.customSubmit.disabled = true;
+    els.customError.textContent = '';
+    els.customInput.removeAttribute('aria-invalid');
     try {
       const response = await deps.send({ type: 'extendLimit', id: ruleId, minutes });
       rule = response.ok ? response.rule : null;
       extended = true;
+      els.customInput.value = '';
       render();
     } catch {
       for (const button of els.extendButtons) button.disabled = false;
+      els.customInput.disabled = false;
+      els.customSubmit.disabled = false;
       els.hint.textContent = TEXT.errorMessage;
     }
+  }
+
+  function extendCustom(): void {
+    const minutes = Number(els.customInput.value);
+    const maximum = rule === null ? 0 : MAX_LIMIT_MINUTES - rule.limitMinutes;
+    if (!Number.isInteger(minutes) || minutes < 1 || minutes > maximum) {
+      els.customInput.setAttribute('aria-invalid', 'true');
+      els.customError.textContent = TEXT.customMinutesError(maximum);
+      return;
+    }
+    void extend(minutes);
   }
 
   function continueToSite(): void {
@@ -124,6 +151,14 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
   for (const button of els.extendButtons) {
     button.addEventListener('click', () => void extend(Number(button.dataset['extend'])));
   }
+  els.customForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    extendCustom();
+  });
+  els.customInput.addEventListener('input', () => {
+    els.customInput.removeAttribute('aria-invalid');
+    els.customError.textContent = '';
+  });
   els.continueButton.addEventListener('click', continueToSite);
   deps.subscribe?.(() => void load());
 
