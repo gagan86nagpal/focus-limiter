@@ -152,7 +152,7 @@ the UI never recomputes usage math.
   pattern the Block button would create, and `hasRule` says whether one already
   exists.
 - **`ActivityView`** = the whole activity tab for one date: `totalSeconds`,
-  `coveredSeconds`, `hostCount`, `peakMinute`, `hourly[]`, `minutes[]`, `top[]`,
+  `coveredSeconds`, `hostCount`, `peak`, `hourly[]`, `minutes[]`, `top[]`,
   plus `minDate`/`maxDate` for the date picker and `datesWithData`.
 
 ### Message DTOs (UI → worker)

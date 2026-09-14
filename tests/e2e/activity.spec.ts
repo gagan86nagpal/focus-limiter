@@ -86,7 +86,9 @@ test('the day summarises time, sites, and the busiest minute', async ({ page, ex
 
   await expect(page.getByTestId('activity-total')).toHaveText('1h 05m');
   await expect(page.getByTestId('activity-sites')).toHaveText('3');
+  // The 09:00 hour holds half an hour of news.example, more than any other hour of the day.
   await expect(page.getByTestId('activity-peak')).toHaveText('09:00');
+  await expect(page.getByTestId('activity-peak-sub')).toHaveText('30m of that hour');
   await expect(page.getByTestId('activity-day-label')).toHaveText('Today');
 });
 

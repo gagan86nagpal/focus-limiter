@@ -11,6 +11,7 @@ import {
   hostOf,
   hostPattern,
   isRecordable,
+  peakHourOf,
   pruneDays,
   segmentSeconds,
   sessionSegment,
@@ -331,6 +332,27 @@ describe('coveredSeconds', () => {
   });
 });
 
+describe('peakHourOf', () => {
+  const hours = (entries: Record<number, number>): number[] =>
+    Array.from({ length: 24 }, (_unused, hour) => entries[hour] ?? 0);
+
+  it('picks the hour holding the most time, and says how much', () => {
+    expect(peakHourOf(hours({ 9: 600, 14: 1800, 21: 300 }))).toEqual({ hour: 14, seconds: 1800 });
+  });
+
+  it('keeps the earlier hour when two are level', () => {
+    expect(peakHourOf(hours({ 8: 1800, 17: 1800 }))).toEqual({ hour: 8, seconds: 1800 });
+  });
+
+  it('has no answer for a day with nothing in it', () => {
+    expect(peakHourOf(hours({}))).toBeNull();
+  });
+
+  it('counts midnight like any other hour', () => {
+    expect(peakHourOf(hours({ 0: 1200, 6: 60 }))).toEqual({ hour: 0, seconds: 1200 });
+  });
+});
+
 describe('bucketSeconds and toHourly', () => {
   it('places a segment in the hour it falls in', () => {
     const hourly = toHourly([seg({ startedAt: at(9, 10), endedAt: at(9, 40) })], '2026-09-14');
@@ -381,14 +403,16 @@ describe('buildActivityView', () => {
     expect(view.minutes.length).toBeGreaterThan(0);
   });
 
-  it('reports the busiest minute', () => {
+  it('reports the busiest hour', () => {
     const view = buildActivityView(days, [], '2026-09-14', DAY);
-    expect(view.peakMinute).toBe(540);
+    // This day has two minutes at 09:00 and half an hour at 11:00. The old busiest-minute
+    // reading named 09:00, because that is where the first full minute landed.
+    expect(view.peak).toEqual({ hour: 11, seconds: 1800 });
   });
 
   it('has no peak on a day with no activity', () => {
     const view = buildActivityView(days, [], '2026-09-12', DAY);
-    expect(view.peakMinute).toBeNull();
+    expect(view.peak).toBeNull();
     expect(view.totalSeconds).toBe(0);
     expect(view.top).toEqual([]);
   });

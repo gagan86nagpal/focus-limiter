@@ -145,6 +145,7 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     totalSub: q<HTMLElement>(root, '#activity-total-sub'),
     sites: q<HTMLElement>(root, '#activity-sites'),
     peak: q<HTMLElement>(root, '#activity-peak'),
+    peakSub: q<HTMLElement>(root, '#activity-peak-sub'),
     covered: q<HTMLElement>(root, '#activity-covered'),
     coveredSub: q<HTMLElement>(root, '#activity-covered-sub'),
     hint: q<HTMLElement>(root, '#activity-hint'),
@@ -262,7 +263,10 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     els.totalSub.textContent =
       current.totalSeconds === 0 ? 'no activity yet' : `across ${current.minutes.length} active minutes`;
     els.sites.textContent = String(current.hostCount);
-    els.peak.textContent = current.peakMinute === null ? '—' : formatClock(current.peakMinute);
+    const peak = current.peak;
+    els.peak.textContent = peak === null ? '—' : formatClock(peak.hour * 60);
+    els.peakSub.textContent =
+      peak === null ? 'busiest hour' : `${formatCompact(peak.seconds)} of that hour`;
     const coveredPercent =
       current.totalSeconds === 0 ? 0 : Math.round((current.coveredSeconds / current.totalSeconds) * 100);
     els.covered.textContent = `${coveredPercent}%`;

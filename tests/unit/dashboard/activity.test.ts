@@ -48,8 +48,8 @@ const view = (over: Partial<ActivityView> = {}): ActivityView => ({
   totalSeconds: 1000,
   coveredSeconds: 250,
   hostCount: 2,
-  peakMinute: 540,
-  hourly: Array.from({ length: 24 }, () => 0),
+  peak: { hour: 9, seconds: 1800 },
+  hourly: Array.from({ length: 24 }, (_unused, hour) => (hour === 9 ? 1800 : 0)),
   minutes: [slot(540), slot(541)],
   top: [host(), host({ host: 'y.com', url: 'https://y.com/', seconds: 400, share: 0.4 })],
   datesWithData: ['2026-09-14'],
@@ -169,6 +169,7 @@ describe('activity panel', () => {
     expect(el('activity-total-sub').textContent).toBe('across 2 active minutes');
     expect(el('activity-sites').textContent).toBe('2');
     expect(el('activity-peak').textContent).toBe('09:00');
+    expect(el('activity-peak-sub').textContent).toBe('30m of that hour');
     expect(el('activity-covered').textContent).toBe('25%');
     expect(el('activity-covered-sub').textContent).toBe('4m of tracked time');
     expect(el('activity-day-label').textContent).toBe('Today');
@@ -176,12 +177,13 @@ describe('activity panel', () => {
 
   it('shows a resting state when the day is empty', async () => {
     const { panel } = mount({
-      getActivity: view({ totalSeconds: 0, coveredSeconds: 0, hostCount: 0, peakMinute: null, minutes: [], top: [] }),
+      getActivity: view({ totalSeconds: 0, coveredSeconds: 0, hostCount: 0, peak: null, minutes: [], top: [] }),
     });
     await panel.load();
 
     expect(el('activity-total-sub').textContent).toBe('no activity yet');
     expect(el('activity-peak').textContent).toBe('—');
+    expect(el('activity-peak-sub').textContent).toBe('busiest hour');
     expect(el('activity-covered').textContent).toBe('0%');
     expect(el('activity-empty').hidden).toBe(false);
     expect(el('activity-top-panel').hidden).toBe(true);

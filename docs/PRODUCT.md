@@ -16,8 +16,8 @@ Every screen here is the real extension, photographed in dark mode by
 ## Where the day went
 
 The **Activity** tab opens on today. Four figures summarise it: time actually
-spent looking at pages, how many sites that was spread across, the busiest
-minute, and how much of the day is already under a limit you set.
+spent looking at pages, how many sites that was spread across, the hour that
+took the most, and how much of the day is already under a limit you set.
 
 Underneath is the day itself — a 24-hour strip where each block is an unbroken
 stretch on one site, coloured to match the list below. Empty stretches are time

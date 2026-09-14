@@ -98,6 +98,13 @@ export interface HostTotal {
   hasRule: boolean;
 }
 
+/** The hour of the day that took the most time, and how much of it went. */
+export interface PeakHour {
+  /** Hour of the day, 0-23. */
+  hour: number;
+  seconds: number;
+}
+
 /** Everything the activity tab renders for one day. */
 export interface ActivityView {
   date: string;
@@ -107,7 +114,9 @@ export interface ActivityView {
   /** Time spent on hosts an existing rule already covers. */
   coveredSeconds: number;
   hostCount: number;
-  peakMinute: number | null;
+  /** The heaviest hour of the day. Null when the day is empty. */
+  peak: PeakHour | null;
+  /** Seconds spent in each hour of the day, 24 entries. */
   hourly: number[];
   minutes: MinuteSlot[];
   top: HostTotal[];
