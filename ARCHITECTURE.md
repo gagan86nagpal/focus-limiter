@@ -5,6 +5,34 @@ share a small set of typed data structures. This document lists the domain
 entities, the data-transfer objects (DTOs) exchanged between surfaces, the
 storage layout, and the user flows.
 
+## Diagrams
+
+Swimlane renderings of everything below, for readers who prefer a picture.
+
+### System architecture
+
+Six layers and one direction of dependency.
+
+![System architecture](docs/architecture/system-architecture.png)
+
+### Request lifecycle
+
+A single "Save rule" click traced across every lane and back to the UI.
+
+![Request lifecycle](docs/architecture/request-lifecycle.png)
+
+### Domain entities and DTOs
+
+What is stored, what is volatile, and what crosses the UI boundary.
+
+![Domain entities and DTOs](docs/architecture/domain-entities-and-dtos.png)
+
+### User flows
+
+The four journeys a person actually experiences.
+
+![User flows](docs/architecture/user-flows.png)
+
 ## Components
 
 | Component | Location | Role |
