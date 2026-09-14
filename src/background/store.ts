@@ -20,6 +20,14 @@ export async function saveData(data: StoredData): Promise<void> {
   await chrome.storage.local.set({ rules: data.rules, usage: data.usage });
 }
 
+/**
+ * Persists usage without touching `rules`. Reconcile only ever changes usage, so writing the
+ * rules it happened to read back would clobber any rule edit made since that read.
+ */
+export async function saveUsage(usage: UsageDay): Promise<void> {
+  await chrome.storage.local.set({ usage });
+}
+
 /** Volatile state lives in storage.session so it survives worker restarts but not browser restarts. */
 export async function loadRuntime(): Promise<RuntimeState> {
   const raw = await chrome.storage.session.get(['session', 'focused', 'idle']);

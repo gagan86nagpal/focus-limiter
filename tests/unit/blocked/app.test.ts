@@ -185,6 +185,32 @@ describe('blocked page', () => {
     expect(h.navigate).toHaveBeenCalledWith(DASHBOARD_PAGE);
   });
 
+  it('recovers when the rule shows up in a later storage change', async () => {
+    installChromeMock();
+    loadPageBody('blocked.html');
+    let rule: RuleView | null = null;
+    let notify = (): void => undefined;
+    const send = vi.fn(async () => ({ rules: rule === null ? [] : [rule], maxRules: 10 }));
+    const page = createBlockedPage(document, {
+      send: send as unknown as BlockedDeps['send'],
+      navigate: vi.fn(),
+      search: '?rule=r1',
+      subscribe: (onChange) => {
+        notify = onChange;
+      },
+    });
+
+    await page.load();
+    expect(byId('extend').hidden).toBe(true);
+
+    rule = ruleView();
+    notify();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(byId('extend').hidden).toBe(false);
+    expect(byId('pattern').textContent).toBe('x\\.com');
+  });
+
   it('handles a completely empty query string', async () => {
     installChromeMock();
     loadPageBody('blocked.html');
