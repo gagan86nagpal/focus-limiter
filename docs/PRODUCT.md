@@ -94,10 +94,12 @@ more time.
 ## Deciding to spend more
 
 If you do want more, +5 and +10 are one click, or type any number of minutes.
-The limit changes, **Continue** wakes up, and it takes you back to the page you
-were on. Tracking picks up where it left off.
+Choosing an amount only marks it: the limit does not move and **Continue** says
+what it is about to do. Pressing it spends the minutes and takes you back to the
+page you were on, in one step. Nothing is charged if you change your mind and
+close the tab instead.
 
-![Limit extended](screenshots/blocked-extended-dark.png)
+![Five more minutes chosen](screenshots/blocked-chosen-dark.png)
 
 ---
 

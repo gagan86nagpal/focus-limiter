@@ -17,7 +17,11 @@ export interface BlockedDeps {
 export const TEXT = {
   reachedTitle: 'Daily limit reached',
   reachedMessage: "You've reached today's limit for this rule.",
-  reachedHint: 'Increase your limit to continue.',
+  reachedHint: 'Choose how much longer, then continue.',
+  /** Says plainly that picking an amount has not spent anything yet. */
+  stagedHint: (minutes: number) => `+${String(minutes)} min is added when you continue.`,
+  continueLabel: 'Continue',
+  continueWith: (minutes: number) => `Add ${String(minutes)} min and continue`,
   extendedTitle: 'Limit increased',
   timeLeft: (remaining: string) => `You have ${remaining} left today for this rule.`,
   missingTitle: 'This rule no longer exists',
@@ -64,6 +68,12 @@ export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
 
   let rule: RuleView | null = null;
   let extended = false;
+  /**
+   * Minutes the user has picked but not yet spent. Choosing an amount used to write it straight
+   * through, which meant the limit had already moved by the time you read the button that was
+   * supposedly going to move it. Nothing is written until Continue.
+   */
+  let staged: number | null = null;
 
   function renderMissing(title: string, message: string): void {
     els.title.textContent = title;
@@ -72,6 +82,7 @@ export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
     els.extend.hidden = true;
     els.message.textContent = message;
     els.hint.textContent = '';
+    els.continueButton.textContent = TEXT.continueLabel;
     els.continueButton.disabled = false;
   }
 
@@ -89,22 +100,34 @@ export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
     els.extend.hidden = false;
     els.used.textContent = formatUsage(rule.usedSeconds);
     els.limit.textContent = formatLimit(rule.limitMinutes);
-    for (const button of els.extendButtons) button.disabled = atMax;
+    for (const button of els.extendButtons) {
+      const chosen = staged === Number(button.dataset['extend']);
+      button.disabled = atMax;
+      button.classList.toggle('is-selected', chosen);
+      button.setAttribute('aria-pressed', String(chosen));
+    }
     els.customInput.disabled = atMax;
     els.customInput.max = String(maximumExtension);
     els.customSubmit.disabled = atMax;
+    els.continueButton.textContent =
+      staged === null ? TEXT.continueLabel : TEXT.continueWith(staged);
+
+    let hint = '';
+    if (staged !== null) hint = TEXT.stagedHint(staged);
+    else if (atMax) hint = TEXT.maxHint;
+    else if (rule.limitReached) hint = TEXT.reachedHint;
 
     if (rule.limitReached) {
       els.title.textContent = TEXT.reachedTitle;
       els.message.textContent = TEXT.reachedMessage;
-      els.continueButton.disabled = true;
-      els.hint.textContent = atMax ? TEXT.maxHint : TEXT.reachedHint;
+      // Nothing has been spent yet, so the way out only opens once an amount is chosen.
+      els.continueButton.disabled = staged === null;
     } else {
       els.title.textContent = extended ? TEXT.extendedTitle : TEXT.reachedTitle;
       els.message.textContent = TEXT.timeLeft(formatUsage(remaining));
       els.continueButton.disabled = false;
-      els.hint.textContent = atMax ? TEXT.maxHint : '';
     }
+    els.hint.textContent = hint;
   }
 
   async function load(): Promise<void> {
@@ -117,27 +140,15 @@ export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
     }
   }
 
-  async function extend(minutes: number): Promise<void> {
-    for (const button of els.extendButtons) button.disabled = true;
-    els.customInput.disabled = true;
-    els.customSubmit.disabled = true;
+  /** Picks an amount without spending it. Passing null clears the choice. */
+  function stage(minutes: number | null): void {
+    staged = minutes;
     els.customError.textContent = '';
     els.customInput.removeAttribute('aria-invalid');
-    try {
-      const response = await deps.send({ type: 'extendLimit', id: ruleId, minutes });
-      rule = response.ok ? response.rule : null;
-      extended = true;
-      els.customInput.value = '';
-      render();
-    } catch {
-      for (const button of els.extendButtons) button.disabled = false;
-      els.customInput.disabled = false;
-      els.customSubmit.disabled = false;
-      els.hint.textContent = TEXT.errorMessage;
-    }
+    render();
   }
 
-  function extendCustom(): void {
+  function stageCustom(): void {
     const minutes = Number(els.customInput.value);
     const maximum = rule === null ? 0 : MAX_LIMIT_MINUTES - rule.limitMinutes;
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > maximum) {
@@ -145,26 +156,50 @@ export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
       els.customError.textContent = TEXT.customMinutesError(maximum);
       return;
     }
-    void extend(minutes);
+    stage(minutes);
   }
 
-  function continueToSite(): void {
+  /** Writes the chosen minutes through. False means the write failed and the page should stay. */
+  async function spend(minutes: number): Promise<boolean> {
+    els.continueButton.disabled = true;
+    try {
+      const response = await deps.send({ type: 'extendLimit', id: ruleId, minutes });
+      rule = response.ok ? response.rule : null;
+      extended = true;
+      staged = null;
+      els.customInput.value = '';
+      render();
+      return true;
+    } catch {
+      els.continueButton.disabled = false;
+      els.hint.textContent = TEXT.errorMessage;
+      return false;
+    }
+  }
+
+  async function continueToSite(): Promise<void> {
+    // The single commit point: the limit moves and the tab leaves, or neither happens.
+    if (staged !== null && !(await spend(staged))) return;
     deps.navigate(isTrackableUrl(originalUrl) ? originalUrl : DASHBOARD_PAGE);
   }
 
   for (const button of els.extendButtons) {
-    button.addEventListener('click', () => void extend(Number(button.dataset['extend'])));
+    button.addEventListener('click', () => {
+      const minutes = Number(button.dataset['extend']);
+      // Clicking the chosen amount again takes it back off.
+      stage(staged === minutes ? null : minutes);
+    });
   }
   els.customForm.addEventListener('submit', (event) => {
     event.preventDefault();
-    extendCustom();
+    stageCustom();
   });
   els.customInput.addEventListener('input', () => {
     els.customInput.removeAttribute('aria-invalid');
     els.customError.textContent = '';
   });
-  els.continueButton.addEventListener('click', continueToSite);
+  els.continueButton.addEventListener('click', () => void continueToSite());
   deps.subscribe?.(() => void load());
 
-  return { load, extend, continueToSite };
+  return { load };
 }

@@ -117,34 +117,78 @@ describe('blocked page', () => {
     expect(byId<HTMLButtonElement>('continue').disabled).toBe(false);
   });
 
-  it('extends the limit and then allows continuing', async () => {
+  it('spends nothing when an amount is chosen', async () => {
+    const h = setup();
+    await h.page.load();
+
+    byId('extend-5').click();
+
+    expect(h.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'extendLimit' }));
+    // The limit has not moved, and the page says as much.
+    expect(byId('blocked-limit').textContent).toBe('5m');
+    expect(byId('title').textContent).toBe(TEXT.reachedTitle);
+    expect(byId('hint').textContent).toBe(TEXT.stagedHint(5));
+    expect(byId('continue').textContent).toBe(TEXT.continueWith(5));
+    expect(byId<HTMLButtonElement>('continue').disabled).toBe(false);
+    expect(byId('extend-5').getAttribute('aria-pressed')).toBe('true');
+    expect(byId('extend-5').classList.contains('is-selected')).toBe(true);
+  });
+
+  it('spends the chosen minutes and leaves, on Continue', async () => {
     const h = setup();
     await h.page.load();
     byId('extend-5').click();
+
+    byId('continue').click();
     await new Promise((r) => setTimeout(r, 0));
+
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 5 });
-    expect(byId('title').textContent).toBe(TEXT.extendedTitle);
     expect(byId('blocked-limit').textContent).toBe('10m');
-    expect(byId<HTMLButtonElement>('continue').disabled).toBe(false);
+    expect(byId('title').textContent).toBe(TEXT.extendedTitle);
+    expect(h.navigate).toHaveBeenCalledWith(ORIGINAL);
   });
 
-  it('extends by ten minutes', async () => {
+  it('takes the choice back off when the same amount is clicked again', async () => {
     const h = setup();
     await h.page.load();
+    byId('extend-5').click();
+
+    byId('extend-5').click();
+
+    expect(byId('extend-5').getAttribute('aria-pressed')).toBe('false');
+    expect(byId('continue').textContent).toBe(TEXT.continueLabel);
+    expect(byId<HTMLButtonElement>('continue').disabled).toBe(true);
+    expect(byId('hint').textContent).toBe(TEXT.reachedHint);
+  });
+
+  it('replaces the choice when a different amount is picked', async () => {
+    const h = setup();
+    await h.page.load();
+    byId('extend-5').click();
+
     byId('extend-10').click();
+    byId('continue').click();
     await new Promise((r) => setTimeout(r, 0));
+
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 10 });
+    expect(h.send).not.toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 5 });
     expect(byId('blocked-limit').textContent).toBe('15m');
   });
 
-  it('extends by a custom whole number of minutes', async () => {
+  it('chooses a custom whole number of minutes, and spends it on Continue', async () => {
     const h = setup();
     await h.page.load();
     byId<HTMLInputElement>('custom-minutes').value = '2';
     byId<HTMLFormElement>('extend-custom').dispatchEvent(
       new Event('submit', { bubbles: true, cancelable: true }),
     );
+
+    expect(h.send).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'extendLimit' }));
+    expect(byId('continue').textContent).toBe(TEXT.continueWith(2));
+
+    byId('continue').click();
     await new Promise((r) => setTimeout(r, 0));
+
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 2 });
     expect(byId('blocked-limit').textContent).toBe('7m');
     expect(byId<HTMLInputElement>('custom-minutes').value).toBe('');
@@ -199,23 +243,32 @@ describe('blocked page', () => {
     expect(byId('hint').textContent).toBe(TEXT.maxHint);
   });
 
-  it('treats a missing rule after extending as the missing state', async () => {
+  it('reports the missing state when the rule vanishes before the spend lands', async () => {
     const h = setup({ rule: null });
     await h.page.load();
-    // The rule is gone, but the extend button is still wired; clicking reports missing.
+    // The rule is gone, but the buttons are still wired, so the spend comes back refused.
     byId('extend-5').click();
+
+    byId('continue').click();
     await new Promise((r) => setTimeout(r, 0));
+
     expect(byId('title').textContent).toBe(TEXT.missingTitle);
+    expect(h.navigate).toHaveBeenCalledWith(ORIGINAL);
   });
 
-  it('re-enables extend and shows an error when extending throws', async () => {
+  it('stays on the page and keeps the choice when the spend fails', async () => {
     const h = setup();
     await h.page.load();
-    h.send.mockRejectedValueOnce(new Error('offline'));
     byId('extend-5').click();
+    h.send.mockRejectedValueOnce(new Error('offline'));
+
+    byId('continue').click();
     await new Promise((r) => setTimeout(r, 0));
+
     expect(byId('hint').textContent).toBe(TEXT.errorMessage);
-    expect(byId<HTMLButtonElement>('extend-5').disabled).toBe(false);
+    expect(byId<HTMLButtonElement>('continue').disabled).toBe(false);
+    expect(byId('blocked-limit').textContent).toBe('5m');
+    expect(h.navigate).not.toHaveBeenCalled();
   });
 
   it('navigates back to the original URL on Continue', async () => {
