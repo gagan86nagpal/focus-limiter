@@ -1166,7 +1166,19 @@ button {
 @keyframes blocked-pop {
   from {
     opacity: 0;
-    transform: scale(0.92) translateY(10px);
+    transform: scale(0.9) translateY(12px);
+    animation-timing-function: ease-out;
+  }
+  /*
+   * Past full size, then back. The overshoot is stated here rather than left to an overshooting
+   * easing, because a bezier's overshoot is a fraction of the distance travelled: across a
+   * 0.9-to-1 scale it came to under a percent, which is a few pixels and reads as nothing.
+   * Opacity is already done by this point, so the card settles while being read.
+   */
+  55% {
+    opacity: 1;
+    transform: scale(1.025) translateY(0);
+    animation-timing-function: ease-in-out;
   }
   to {
     opacity: 1;
@@ -1179,7 +1191,7 @@ button {
   max-width: 440px;
   padding: var(--space-7) var(--space-5);
   text-align: center;
-  animation: blocked-pop 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: blocked-pop 280ms both;
 }
 
 /* The actions lift under the pointer, so the way out of the page feels reachable. */
