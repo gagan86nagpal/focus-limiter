@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily limit reached · Focus Limiter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page page-blocked">
+    <main class="blocked">
+      <p class="brand-small">Focus Limiter</p>
+      <h1 class="blocked-title" id="title" data-testid="blocked-title">Daily limit reached</h1>
+      <p class="blocked-pattern" id="pattern" data-testid="blocked-pattern"></p>
+
+      <p class="blocked-usage" id="usage" data-testid="blocked-usage">
+        <span id="used" data-testid="blocked-used"></span>
+        <span class="blocked-usage-sep">/</span>
+        <span id="limit" data-testid="blocked-limit"></span>
+      </p>
+
+      <p class="blocked-copy" id="message" data-testid="blocked-message"></p>
+
+      <section class="extend" id="extend" aria-labelledby="extend-title">
+        <h2 class="extend-title" id="extend-title">Increase your limit</h2>
+        <div class="extend-actions">
+          <button type="button" class="btn btn-secondary" id="extend-5" data-extend="5" data-testid="extend-5">+5 min</button>
+          <button type="button" class="btn btn-secondary" id="extend-10" data-extend="10" data-testid="extend-10">+10 min</button>
+        </div>
+      </section>
+
+      <button type="button" class="btn btn-primary btn-wide" id="continue" data-testid="continue" disabled>
+        Continue
+      </button>
+      <p class="blocked-hint" id="hint" data-testid="blocked-hint"></p>
+
+      <a class="link" id="dashboard-link" href="dashboard.html">Manage rules</a>
+    </main>
+    <script type="module" src="blocked.js"></script>
+  </body>
+</html>

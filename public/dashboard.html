@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Focus Limiter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="page page-dashboard">
+    <main class="container">
+      <header class="page-header">
+        <div class="page-heading">
+          <h1 class="brand">Focus Limiter</h1>
+          <p class="page-subtitle">Daily time limits for the sites that pull you in.</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="add-rule" data-testid="add-rule">+ Add rule</button>
+      </header>
+
+      <section class="section" aria-labelledby="rules-heading">
+        <div class="section-header">
+          <h2 class="section-title" id="rules-heading">Your rules</h2>
+          <span class="section-meta" id="rule-count" data-testid="rule-count"></span>
+        </div>
+
+        <p class="notice" id="limit-notice" data-testid="limit-notice" hidden>
+          You've reached the maximum of 10 rules. Delete one to add another.
+        </p>
+
+        <div class="empty-state" id="empty-state" data-testid="empty-state" hidden>
+          <h3 class="empty-title">No rules yet</h3>
+          <p class="empty-copy">
+            Add a URL pattern and a daily limit. Focus Limiter tracks your time and steps in when
+            you've had enough.
+          </p>
+          <button type="button" class="btn btn-primary" id="empty-add-rule" data-testid="empty-add-rule">
+            Create your first rule
+          </button>
+        </div>
+
+        <ul class="rule-list" id="rule-list" data-testid="rule-list"></ul>
+      </section>
+
+      <footer class="page-footer">
+        <span>Limits reset at midnight.</span>
+        <span id="last-updated" data-testid="last-updated"></span>
+      </footer>
+    </main>
+
+    <template id="rule-card-template">
+      <li class="rule-card" data-testid="rule-card">
+        <div class="rule-card-top">
+          <h3 class="rule-pattern" data-field="pattern"></h3>
+          <span class="status-pill" data-field="status" data-testid="limit-reached" hidden>Limit reached</span>
+        </div>
+        <div class="rule-stats">
+          <div class="stat">
+            <span class="stat-label">Used today</span>
+            <span class="stat-value" data-field="used" data-testid="rule-used"></span>
+          </div>
+          <div class="stat">
+            <span class="stat-label">Daily limit</span>
+            <span class="stat-value" data-field="limit" data-testid="rule-limit"></span>
+          </div>
+        </div>
+        <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-field="progress">
+          <div class="progress-fill" data-field="progress-fill"></div>
+        </div>
+        <div class="rule-actions" data-field="actions">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="edit" data-testid="edit-rule">Edit</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="delete" data-testid="delete-rule">Delete</button>
+        </div>
+        <div class="rule-confirm" data-field="confirm" hidden>
+          <span class="rule-confirm-copy">Delete this rule?</span>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="cancel-delete" data-testid="cancel-delete">Cancel</button>
+          <button type="button" class="btn btn-danger btn-sm" data-action="confirm-delete" data-testid="confirm-delete">Delete</button>
+        </div>
+      </li>
+    </template>
+
+    <dialog class="dialog" id="rule-dialog" data-testid="rule-dialog" aria-labelledby="dialog-title">
+      <form class="dialog-form" id="rule-form" novalidate>
+        <h2 class="dialog-title" id="dialog-title">Create rule</h2>
+
+        <div class="field">
+          <label class="field-label" for="pattern">URL pattern</label>
+          <input class="input input-mono" id="pattern" name="pattern" type="text" autocomplete="off"
+            spellcheck="false" placeholder="youtube\.com/shorts.*" data-testid="pattern-input" />
+          <p class="field-hint">A regular expression, matched anywhere in the page URL.</p>
+          <p class="field-error" id="pattern-error" data-testid="pattern-error" role="alert"></p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="test-url">Test URL <span class="optional">optional</span></label>
+          <input class="input" id="test-url" name="testUrl" type="text" autocomplete="off" spellcheck="false"
+            placeholder="https://youtube.com/shorts/abc" data-testid="test-url-input" />
+          <p class="match-status" id="match-status" data-testid="match-status" aria-live="polite"></p>
+        </div>
+
+        <div class="field">
+          <label class="field-label" for="limit">Daily limit</label>
+          <div class="input-group">
+            <input class="input input-number" id="limit" name="limitMinutes" type="number" inputmode="numeric"
+              min="1" max="1440" step="1" value="10" data-testid="limit-input" />
+            <span class="input-suffix">minutes</span>
+          </div>
+          <p class="field-error" id="limit-error" data-testid="limit-error" role="alert"></p>
+        </div>
+
+        <p class="form-error" id="form-error" data-testid="form-error" role="alert"></p>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-secondary" id="cancel-rule" data-testid="cancel-rule">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="save-rule" data-testid="save-rule">Save rule</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="dashboard.js"></script>
+  </body>
+</html>
