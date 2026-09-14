@@ -120,6 +120,76 @@ test('hovering the chart names the site being viewed at that minute', async ({
   await expect(page.getByTestId('activity-hint')).toHaveText(/^10:\d\d · video\.example$/);
 });
 
+test('clicking the chart zooms into that hour, and the chip goes back to the day', async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedToday(serviceWorker);
+  await openActivity(page, extensionId);
+
+  const chart = page.getByTestId('activity-chart');
+  const chip = page.getByTestId('activity-zoom-out');
+  const axis = page.locator('#activity-axis span');
+  // video.example ran 10:00-10:20, the second stretch of the day.
+  const videoBar = page.locator('#activity-chart .tl-bar').nth(1);
+
+  await expect(chip).toBeHidden();
+  await expect(axis).toHaveText(['00:00', '06:00', '12:00', '18:00', '24:00']);
+  const dayWidth = (await videoBar.boundingBox())!.width;
+
+  const box = (await chart.boundingBox())!;
+  await chart.click({
+    position: { x: box.width * ((10 * 60 + 10) / 1440), y: box.height / 2 },
+  });
+
+  await expect(chip).toBeVisible();
+  await expect(page.getByTestId('activity-zoom-range')).toHaveText('10:00–11:00');
+  await expect(chart).toHaveClass(/is-zoomed/);
+  await expect(axis).toHaveText(['10:00', '10:15', '10:30', '10:45', '11:00']);
+
+  // Twenty minutes is a sliver of a day and a third of an hour, so the block really did grow.
+  await expect
+    .poll(async () => (await videoBar.boundingBox())!.width)
+    .toBeGreaterThan(dayWidth * 5);
+
+  // The pointer maths follows the zoom: ten minutes in is 10:10, still video.example.
+  await page.mouse.move(box.x + box.width * (10 / 60), box.y + box.height / 2);
+  await expect(page.getByTestId('activity-tooltip')).toContainText('video.example');
+  await expect(page.getByTestId('activity-hint')).toHaveText(/^10:\d\d · video\.example$/);
+
+  await chip.click();
+
+  await expect(chip).toBeHidden();
+  await expect(chart).not.toHaveClass(/is-zoomed/);
+  await expect(axis).toHaveText(['00:00', '06:00', '12:00', '18:00', '24:00']);
+});
+
+test('moving to another day drops the zoom', async ({ page, extensionId, serviceWorker }) => {
+  await seedActivity(serviceWorker, [
+    { date: dayKey(), segments: TODAY },
+    { date: dayKey(-1), segments: [segment('archive.example', '/old', 8, 0, 45, -1)] },
+  ]);
+  await openActivity(page, extensionId);
+
+  const chart = page.getByTestId('activity-chart');
+  const box = (await chart.boundingBox())!;
+  await chart.click({ position: { x: box.width * (610 / 1440), y: box.height / 2 } });
+  await expect(page.getByTestId('activity-zoom-out')).toBeVisible();
+
+  await page.getByTestId('activity-prev').click();
+
+  await expect(page.getByTestId('activity-day-label')).toHaveText('Yesterday');
+  await expect(page.getByTestId('activity-zoom-out')).toBeHidden();
+  await expect(page.locator('#activity-axis span')).toHaveText([
+    '00:00',
+    '06:00',
+    '12:00',
+    '18:00',
+    '24:00',
+  ]);
+});
+
 test('hovering a site dims the rest of the chart', async ({ page, extensionId, serviceWorker }) => {
   await seedToday(serviceWorker);
   await openActivity(page, extensionId);

@@ -101,8 +101,16 @@
 
         <figure class="panel" data-testid="activity-timeline">
           <div class="panel-head">
-            <figcaption class="panel-title">Minute by minute</figcaption>
-            <span class="panel-hint" id="activity-hint" data-testid="activity-hint">Hover the chart for detail</span>
+            <div class="panel-head-start">
+              <figcaption class="panel-title">Minute by minute</figcaption>
+              <button type="button" class="chart-zoom" id="activity-zoom-out"
+                data-testid="activity-zoom-out" aria-label="Back to the whole day" hidden>
+                <span id="activity-zoom-range" data-testid="activity-zoom-range"></span>
+                <span class="chart-zoom-x" aria-hidden="true">&times;</span>
+              </button>
+            </div>
+            <!-- Matches HOVER_HINT in src/dashboard/activity.ts, which replaces it on hover. -->
+            <span class="panel-hint" id="activity-hint" data-testid="activity-hint">Hover for detail &middot; click to zoom into an hour</span>
           </div>
           <div class="chart-wrap" id="activity-chart-wrap">
             <svg class="chart" id="activity-chart" data-testid="activity-chart" viewBox="0 0 1440 120"
@@ -115,7 +123,8 @@
               <span class="tooltip-dur" id="activity-tooltip-dur"></span>
             </div>
           </div>
-          <div class="chart-axis" aria-hidden="true">
+          <!-- Labels are rewritten on render, since they follow the zoomed window. -->
+          <div class="chart-axis" id="activity-axis" data-testid="activity-axis" aria-hidden="true">
             <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span>
           </div>
           <ul class="legend" id="activity-legend" data-testid="activity-legend"></ul>

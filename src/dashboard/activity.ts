@@ -21,12 +21,17 @@ export interface ActivityDeps {
 
 export const ACTIVITY_ERROR_TEXT = "Couldn't load activity. Please try again.";
 export const BLOCK_FAILED_TEXT = "Couldn't create that rule. Please try again.";
-export const HOVER_HINT = 'Hover the chart for detail';
+export const HOVER_HINT = 'Hover for detail · click to zoom into an hour';
+export const ZOOMED_HINT = 'Hover for detail · × for the whole day';
 export const DEFAULT_BLOCK_MINUTES = 10;
 /** Hosts beyond this many share the neutral colour in the chart, legend, and rows. */
 export const PALETTE_SIZE = 6;
-/** How far either side of the pointer to look for an active minute. */
+/** How far either side of the pointer to look for an active minute, across a whole day. */
 export const HOVER_TOLERANCE_MINUTES = 8;
+/** Clicking the day strip zooms to the hour that was clicked. */
+export const ZOOM_MINUTES = 60;
+/** Labels along the axis, which follow whatever window is on screen. */
+export const AXIS_TICKS = 4;
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 /**
@@ -48,6 +53,33 @@ function q<T extends Element>(root: ParentNode, selector: string): T {
 /** Chart colour class for a host, by its rank in the top-sites list. */
 export function colourClass(rank: number): string {
   return rank < PALETTE_SIZE ? `tl-${rank}` : 'tl-other';
+}
+
+/** The stretch of the day the chart is currently drawing, in minutes past midnight. */
+export interface ChartWindow {
+  start: number;
+  end: number;
+}
+
+export const WHOLE_DAY: ChartWindow = { start: 0, end: MINUTES_PER_DAY };
+
+/** Gridlines every hour across a day, every ten minutes once zoomed in. */
+export function gridStep(span: number): number {
+  return span <= 120 ? 10 : 60;
+}
+
+/** Midnight is the end of one window and the start of the next, and reads differently in each. */
+export function axisLabel(minute: number): string {
+  return minute >= MINUTES_PER_DAY ? '24:00' : formatClock(minute);
+}
+
+/**
+ * Hover tolerance is a fraction of the visible span rather than a fixed number of minutes.
+ * Eight minutes is a couple of pixels across a whole day, but an eighth of a zoomed hour, where
+ * it would happily name a minute that is no longer on screen.
+ */
+export function hoverTolerance(span: number): number {
+  return Math.max(1, Math.round((HOVER_TOLERANCE_MINUTES * span) / MINUTES_PER_DAY));
 }
 
 export interface ChartRun {
@@ -84,9 +116,13 @@ export function toRuns(slots: MinuteSlot[]): ChartRun[] {
 }
 
 /** The active minute nearest `minute`, or null when the pointer is over a quiet stretch. */
-export function nearestSlot(slots: MinuteSlot[], minute: number): MinuteSlot | null {
+export function nearestSlot(
+  slots: MinuteSlot[],
+  minute: number,
+  tolerance: number = HOVER_TOLERANCE_MINUTES,
+): MinuteSlot | null {
   let best: MinuteSlot | null = null;
-  let bestDistance = HOVER_TOLERANCE_MINUTES + 1;
+  let bestDistance = tolerance + 1;
   for (const slot of slots) {
     const distance = Math.abs(slot.minute - minute);
     if (distance < bestDistance) {
@@ -94,7 +130,7 @@ export function nearestSlot(slots: MinuteSlot[], minute: number): MinuteSlot | n
       bestDistance = distance;
     }
   }
-  return bestDistance <= HOVER_TOLERANCE_MINUTES ? best : null;
+  return bestDistance <= tolerance ? best : null;
 }
 
 export function createActivityPanel(root: Document, deps: ActivityDeps) {
@@ -113,6 +149,9 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     coveredSub: q<HTMLElement>(root, '#activity-covered-sub'),
     hint: q<HTMLElement>(root, '#activity-hint'),
     chart: q<SVGSVGElement>(root, '#activity-chart'),
+    axis: q<HTMLElement>(root, '#activity-axis'),
+    zoomOut: q<HTMLButtonElement>(root, '#activity-zoom-out'),
+    zoomRange: q<HTMLElement>(root, '#activity-zoom-range'),
     tooltip: q<HTMLElement>(root, '#activity-tooltip'),
     tooltipSwatch: q<HTMLElement>(root, '#activity-tooltip-swatch'),
     tooltipTime: q<HTMLElement>(root, '#activity-tooltip-time'),
@@ -132,11 +171,15 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
   let rows = new Map<string, HTMLLIElement>();
   let cursor: SVGLineElement | null = null;
   let pinnedHost: string | null = null;
+  /** null means the whole day; otherwise the hour the chart is zoomed into. */
+  let zoom: ChartWindow | null = null;
 
   // ----- data -----
 
   async function load(next: string = date): Promise<void> {
     date = next;
+    // A zoomed hour means nothing on a different day, and an empty one would look broken.
+    zoom = null;
     try {
       view = await deps.send({ type: 'getActivity', date });
       els.error.hidden = true;
@@ -232,20 +275,26 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
 
     pinnedHost = current.top.some((entry) => entry.host === pinnedHost) ? pinnedHost : null;
     renderChart(current);
+    renderAxis();
+    renderZoom();
     renderLegend(current);
     renderTop(current);
     highlight(pinnedHost);
   }
 
   function renderChart(current: ActivityView): void {
+    const { start, end } = zoom ?? WHOLE_DAY;
+    const span = end - start;
     els.chart.replaceChildren();
-    els.chart.setAttribute('viewBox', `0 0 ${MINUTES_PER_DAY} ${CHART_HEIGHT}`);
+    // Drawing in minutes keeps every x below in absolute clock terms, zoomed or not.
+    els.chart.setAttribute('viewBox', `${start} 0 ${span} ${CHART_HEIGHT}`);
     bars = [];
 
-    // Hour gridlines give the strip a readable scale without an axis component.
-    for (let hour = 1; hour < HOURS_PER_DAY; hour += 1) {
+    // Gridlines give the strip a readable scale without an axis component.
+    const step = gridStep(span);
+    for (let minute = start + step; minute < end; minute += step) {
       const line = root.createElementNS(SVG_NS, 'line');
-      const x = String(hour * 60);
+      const x = String(minute);
       line.setAttribute('x1', x);
       line.setAttribute('x2', x);
       line.setAttribute('y1', '0');
@@ -254,6 +303,9 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
       els.chart.appendChild(line);
     }
 
+    // A minimum width in minutes would swell to a fat block once zoomed, so it scales with the
+    // window and stays the same few pixels on screen.
+    const minRun = (MIN_RUN_WIDTH * span) / MINUTES_PER_DAY;
     for (const run of toRuns(current.minutes)) {
       // A minute only partly spent on a site sits lower in the band.
       const height = Math.max(MIN_RUN_HEIGHT, (run.activeSeconds / 60) * CHART_HEIGHT);
@@ -261,7 +313,7 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
       bar.setAttribute('x', String(run.start));
       bar.setAttribute('y', String(CHART_HEIGHT - height));
       // A one-minute glance is a third of a pixel wide; give every run a visible footprint.
-      bar.setAttribute('width', String(Math.max(MIN_RUN_WIDTH, run.end - run.start)));
+      bar.setAttribute('width', String(Math.max(minRun, run.end - run.start)));
       bar.setAttribute('height', String(height));
       bar.setAttribute('class', `tl-bar ${colourClass(rankOf(current, run.host))}`);
       bar.dataset['host'] = run.host;
@@ -275,6 +327,31 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     cursor.setAttribute('class', 'tl-cursor');
     cursor.setAttribute('visibility', 'hidden');
     els.chart.appendChild(cursor);
+  }
+
+  function renderAxis(): void {
+    const { start, end } = zoom ?? WHOLE_DAY;
+    els.axis.replaceChildren();
+    for (let tick = 0; tick <= AXIS_TICKS; tick += 1) {
+      const label = root.createElement('span');
+      label.textContent = axisLabel(start + ((end - start) * tick) / AXIS_TICKS);
+      els.axis.appendChild(label);
+    }
+  }
+
+  function renderZoom(): void {
+    const range = zoom;
+    els.zoomOut.hidden = range === null;
+    els.zoomRange.textContent =
+      range === null ? '' : `${formatClock(range.start)}–${axisLabel(range.end)}`;
+    els.chart.classList.toggle('is-zoomed', range !== null);
+  }
+
+  /** Redraws for a new window. `render` is cheap and already knows how to draw everything. */
+  function applyZoom(next: ChartWindow | null): void {
+    zoom = next;
+    hideTooltip();
+    render();
   }
 
   function renderLegend(current: ActivityView): void {
@@ -370,12 +447,13 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     if (box.width === 0) return null;
     const ratio = (event.clientX - box.left) / box.width;
     if (ratio < 0 || ratio > 1) return null;
-    return Math.min(MINUTES_PER_DAY - 1, Math.floor(ratio * MINUTES_PER_DAY));
+    const { start, end } = zoom ?? WHOLE_DAY;
+    return Math.min(end - 1, start + Math.floor(ratio * (end - start)));
   }
 
   function hideTooltip(): void {
     els.tooltip.hidden = true;
-    els.hint.textContent = HOVER_HINT;
+    els.hint.textContent = zoom === null ? HOVER_HINT : ZOOMED_HINT;
     cursor?.setAttribute('visibility', 'hidden');
     hover(null);
   }
@@ -384,13 +462,14 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     if (view === null) return;
     const minute = minuteAt(event);
     if (minute === null) return;
-    const slot = nearestSlot(view.minutes, minute);
+    const { start, end } = zoom ?? WHOLE_DAY;
+    const slot = nearestSlot(view.minutes, minute, hoverTolerance(end - start));
     if (slot === null) {
       hideTooltip();
       return;
     }
     els.tooltip.hidden = false;
-    els.tooltip.style.left = `${(slot.minute / MINUTES_PER_DAY) * 100}%`;
+    els.tooltip.style.left = `${((slot.minute - start) / (end - start)) * 100}%`;
     els.tooltipSwatch.className = `tooltip-swatch ${colourClass(rankOf(view, slot.host))}`;
     els.tooltipTime.textContent = formatClock(slot.minute);
     els.tooltipHost.textContent = slot.host;
@@ -412,6 +491,15 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
   });
   els.chart.addEventListener('mousemove', showTooltip);
   els.chart.addEventListener('mouseleave', hideTooltip);
+  els.chart.addEventListener('click', (event) => {
+    // One level of zoom: the chip is how you come back out, so a second click does nothing.
+    if (zoom !== null) return;
+    const minute = minuteAt(event);
+    if (minute === null) return;
+    const start = Math.floor(minute / ZOOM_MINUTES) * ZOOM_MINUTES;
+    applyZoom({ start, end: start + ZOOM_MINUTES });
+  });
+  els.zoomOut.addEventListener('click', () => applyZoom(null));
 
   return { load, getDate: () => date };
 }
