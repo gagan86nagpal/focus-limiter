@@ -51,11 +51,17 @@ export interface StoredData {
   usage: UsageDay;
 }
 
+/**
+ * The three states chrome.idle reports. Stored verbatim rather than reduced to "away", because
+ * a locked screen and a merely quiet keyboard call for different decisions.
+ */
+export type Presence = 'active' | 'idle' | 'locked';
+
 /** Volatile runtime state persisted in chrome.storage.session. */
 export interface RuntimeState {
   session: Session | null;
   focused: boolean;
-  idle: boolean;
+  presence: Presence;
 }
 
 /** A rule decorated with today's usage, as shown in the UI. */

@@ -15,7 +15,7 @@ export function registerBackground(tracker: Tracker = createTracker()): Tracker 
   chrome.windows.onFocusChanged.addListener(
     (windowId) => void tracker.setFocused(windowId !== chrome.windows.WINDOW_ID_NONE),
   );
-  chrome.idle.onStateChanged.addListener((state) => void tracker.setIdle(state !== 'active'));
+  chrome.idle.onStateChanged.addListener((state) => void tracker.setPresence(state));
 
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === ENFORCE_ALARM || alarm.name === HEARTBEAT_ALARM) void tracker.reconcile();

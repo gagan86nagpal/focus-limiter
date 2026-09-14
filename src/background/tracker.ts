@@ -16,7 +16,7 @@ import {
   sessionSegment,
 } from '../shared/activity';
 import { startOfDay } from '../shared/time';
-import type { ActivityView, Rule, RuleView, Session, StateView, UsageDay } from '../shared/types';
+import type { ActivityView, Presence, Rule, RuleView, Session, StateView, UsageDay } from '../shared/types';
 import {
   loadActivity,
   loadData,
@@ -35,6 +35,22 @@ export const BLOCKED_PAGE = 'blocked.html';
 export function blockedPageUrl(ruleId: string, originalUrl: string): string {
   const params = new URLSearchParams({ rule: ruleId, url: originalUrl });
   return chrome.runtime.getURL(`${BLOCKED_PAGE}?${params.toString()}`);
+}
+
+/**
+ * Whether to treat the user as away and stop the clock.
+ *
+ * chrome.idle measures input to the whole machine, not attention to the browser, so a minute
+ * of watching a video registers exactly like a minute of having left the room. Blocking on
+ * that alone switched the limiter off during precisely the browsing it exists to limit, and
+ * the direction of the error is the dangerous one: time goes uncounted and no limit trips.
+ *
+ * A locked screen is unambiguous. Plain idleness only counts as away when the tab is also
+ * silent, so playing media keeps accruing while a genuinely abandoned tab still stops.
+ */
+export function isAway(presence: Presence, audible: boolean): boolean {
+  if (presence === 'locked') return true;
+  return presence === 'idle' && !audible;
 }
 
 /** Seconds elapsed in a session up to `now`, counting only the part that falls on today. */
@@ -155,8 +171,11 @@ export function createTracker(options: TrackerOptions = {}) {
 
     let session: Session | null = null;
     let nextDeadline: number | null = null;
-    const tab = runtime.focused && !runtime.idle ? await getActiveTab() : undefined;
-    if (tab !== undefined && tab.id !== undefined && isTrackableUrl(tab.url)) {
+    // The tab is fetched before the away check because whether it is making a sound is part of
+    // that decision.
+    const tab = runtime.focused ? await getActiveTab() : undefined;
+    const away = isAway(runtime.presence, tab?.audible === true);
+    if (!away && tab !== undefined && tab.id !== undefined && isTrackableUrl(tab.url)) {
       const url = tab.url;
       const matched = data.rules.filter((rule) => ruleMatches(rule, url));
       const exceeded = matched.find((rule) => (data.usage.seconds[rule.id] ?? 0) >= limitSeconds(rule));
@@ -233,10 +252,10 @@ export function createTracker(options: TrackerOptions = {}) {
     });
   }
 
-  function setIdle(idle: boolean): Promise<void> {
+  function setPresence(presence: Presence): Promise<void> {
     return enqueue(async () => {
       const runtime = await loadRuntime();
-      await saveRuntime({ ...runtime, idle });
+      await saveRuntime({ ...runtime, presence });
       await reconcileNow();
     });
   }
@@ -321,7 +340,7 @@ export function createTracker(options: TrackerOptions = {}) {
     start,
     reconcile,
     setFocused,
-    setIdle,
+    setPresence,
     getState,
     getActivity,
     createRule,

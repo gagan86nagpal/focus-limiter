@@ -3,6 +3,7 @@ import {
   ENFORCE_ALARM,
   HEARTBEAT_ALARM,
   createTracker,
+  isAway,
   type Tracker,
 } from '../../../src/background/tracker';
 import {
@@ -177,6 +178,23 @@ describe('blocking', () => {
   });
 });
 
+describe('isAway', () => {
+  it('treats a locked screen as away whatever the tab is doing', () => {
+    expect(isAway('locked', false)).toBe(true);
+    expect(isAway('locked', true)).toBe(true);
+  });
+
+  it('treats a quiet keyboard as away only while the tab is silent', () => {
+    expect(isAway('idle', false)).toBe(true);
+    expect(isAway('idle', true)).toBe(false);
+  });
+
+  it('is never away while the machine is active', () => {
+    expect(isAway('active', false)).toBe(false);
+    expect(isAway('active', true)).toBe(false);
+  });
+});
+
 describe('reconcile guards', () => {
   it('does not track when the window is unfocused', async () => {
     await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
@@ -185,11 +203,36 @@ describe('reconcile guards', () => {
     expect((await loadRuntime()).session).toBeNull();
   });
 
-  it('does not track when the user is idle', async () => {
+  it('does not track a silent tab once the machine goes idle', async () => {
     await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
     setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
-    await tracker.setIdle(true);
+    await tracker.setPresence('idle');
     expect((await loadRuntime()).session).toBeNull();
+  });
+
+  it('keeps tracking an audible tab while the machine is idle', async () => {
+    // Watching a video sends no keyboard or mouse input, so chrome.idle calls it idle even
+    // though this is exactly the browsing a limit is meant to catch.
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home', audible: true }));
+    await tracker.setPresence('idle');
+    expect((await loadRuntime()).session).toMatchObject({ tabId: 7, ruleIds: ['r1'] });
+    expect(tracker.isTicking()).toBe(true);
+  });
+
+  it('stops tracking an audible tab when the screen locks', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home', audible: true }));
+    await tracker.setPresence('locked');
+    expect((await loadRuntime()).session).toBeNull();
+  });
+
+  it('resumes tracking when the machine becomes active again', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
+    await tracker.setPresence('idle');
+    await tracker.setPresence('active');
+    expect((await loadRuntime()).session).not.toBeNull();
   });
 
   it('resumes tracking when focus returns', async () => {
@@ -262,7 +305,7 @@ describe('enforcement ticker', () => {
     await tracker.reconcile();
     expect(tracker.isTicking()).toBe(true);
 
-    await saveRuntime({ session: null, focused: true, idle: false });
+    await saveRuntime({ session: null, focused: true, presence: 'active' });
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(tracker.isTicking()).toBe(false);
