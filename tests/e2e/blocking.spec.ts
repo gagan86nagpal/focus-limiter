@@ -74,6 +74,22 @@ test('the +10 button raises the limit by ten minutes', async ({ context, extensi
   await expect(page.getByTestId('blocked-limit')).toHaveText('15m');
 });
 
+test('a custom amount raises the limit by the entered minutes', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedReachedRule(serviceWorker, '127\\.0\\.0\\.1');
+  const page = await context.newPage();
+  await page.goto(blocked(extensionId, 'r1', `${origin}/`));
+
+  await page.getByTestId('custom-minutes').fill('2');
+  await page.getByTestId('extend-custom-submit').click();
+
+  await expect(page.getByTestId('blocked-limit')).toHaveText('7m');
+  await expect(page.getByTestId('continue')).toBeEnabled();
+});
+
 test('the extension redirects a matching tab that is over its limit', async ({
   context,
   extensionId,

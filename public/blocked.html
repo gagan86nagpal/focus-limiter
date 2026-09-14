@@ -26,6 +26,27 @@
           <button type="button" class="btn btn-secondary" id="extend-5" data-extend="5" data-testid="extend-5">+5 min</button>
           <button type="button" class="btn btn-secondary" id="extend-10" data-extend="10" data-testid="extend-10">+10 min</button>
         </div>
+        <form class="extend-custom" id="extend-custom" data-testid="extend-custom" novalidate>
+          <label class="sr-only" for="custom-minutes">Custom minutes</label>
+          <span class="extend-custom-prefix" aria-hidden="true">+</span>
+          <input
+            class="input input-number extend-custom-input"
+            id="custom-minutes"
+            data-testid="custom-minutes"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            step="1"
+            placeholder="Custom"
+            aria-describedby="custom-minutes-error"
+            required
+          />
+          <span class="extend-custom-suffix">min</span>
+          <button type="submit" class="btn btn-secondary" id="extend-custom-submit" data-testid="extend-custom-submit">
+            Add
+          </button>
+        </form>
+        <p class="field-error extend-custom-error" id="custom-minutes-error" data-testid="custom-minutes-error"></p>
       </section>
 
       <button type="button" class="btn btn-primary btn-wide" id="continue" data-testid="continue" disabled>
