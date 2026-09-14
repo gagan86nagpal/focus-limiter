@@ -99,8 +99,12 @@ export function createTracker(options: TrackerOptions = {}) {
   }
 
   async function getActiveTab(): Promise<chrome.tabs.Tab | undefined> {
-    const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-    return tab;
+    const [inLastFocused] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (inLastFocused !== undefined) return inLastFocused;
+    // Playwright (and some headless Chrome windows) report no last-focused window even
+    // when a normal tab is active. Fall back so we still track that tab.
+    const [active] = await chrome.tabs.query({ active: true });
+    return active;
   }
 
   /**

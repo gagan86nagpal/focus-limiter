@@ -1,4 +1,4 @@
-import { test as base, chromium, type BrowserContext, type Worker } from '@playwright/test';
+import { test as base, chromium, type BrowserContext, type Page, type Worker } from '@playwright/test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,4 +64,41 @@ export async function clearStorage(worker: Worker): Promise<void> {
     await chrome.storage.local.clear();
     await chrome.storage.session.clear();
   });
+}
+
+/** Chrome's local calendar date, which is what `loadData` keys usage on. */
+export async function todayKey(worker: Worker): Promise<string> {
+  return worker.evaluate(() => {
+    const d = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  });
+}
+
+/**
+ * Touches the MV3 worker so Chrome does not sleep it.
+ *
+ * The 1s enforcement ticker lives in the worker as `setInterval`. Sleeping the worker kills that
+ * timer, and `chrome.alarms` then delays a short `when` to ~30s — past typical e2e timeouts.
+ */
+export async function wakeServiceWorker(context: BrowserContext, worker: Worker): Promise<Worker> {
+  try {
+    await worker.evaluate(() => undefined);
+    return worker;
+  } catch {
+    const existing = context.serviceWorkers()[0];
+    const next = existing ?? (await context.waitForEvent('serviceworker', { timeout: 10_000 }));
+    await next.evaluate(() => undefined);
+    return next;
+  }
+}
+
+/** Waits until enforcement redirects `page`, keeping the worker alive so the ticker can fire. */
+export async function waitForBlockedRedirect(page: Page, context: BrowserContext, worker: Worker): Promise<void> {
+  let current = worker;
+  await expect(async () => {
+    await page.bringToFront();
+    current = await wakeServiceWorker(context, current);
+    expect(page.url()).toMatch(/blocked\.html/);
+  }).toPass({ timeout: 15_000, intervals: [200] });
 }

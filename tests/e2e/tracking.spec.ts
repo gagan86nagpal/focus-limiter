@@ -1,6 +1,6 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { clearStorage, expect, seed, test } from './fixtures';
+import { clearStorage, expect, seed, test, todayKey, waitForBlockedRedirect } from './fixtures';
 
 let server: http.Server;
 let origin: string;
@@ -29,13 +29,15 @@ test('accrues time on a matching tab and blocks when the limit is crossed', asyn
   // Limit is 5 minutes (300s); already 298s used, so ~2s of viewing should trip it.
   await seed(serviceWorker, {
     rules: [{ id: 'r1', pattern: '127\\.0\\.0\\.1', limitMinutes: 5, createdAt: Date.now() }],
-    usage: { date: new Date().toISOString().slice(0, 10), seconds: { r1: 298 } },
+    usage: { date: await todayKey(serviceWorker), seconds: { r1: 298 } },
   });
 
   const page = await context.newPage();
+  await page.bringToFront();
   await page.goto(`${origin}/`);
 
   // The page loads (not immediately blocked), then the ticker enforces the deadline.
-  await page.waitForURL(/blocked\.html/, { timeout: 15_000 });
+  // Wake the worker while we wait: Chrome may otherwise sleep it and miss the 2s deadline.
+  await waitForBlockedRedirect(page, context, serviceWorker);
   await expect(page.getByTestId('blocked-title')).toHaveText('Daily limit reached');
 });

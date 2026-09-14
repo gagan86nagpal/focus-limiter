@@ -1,7 +1,7 @@
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { Page } from '@playwright/test';
-import { clearStorage, expect, seed, test } from './fixtures';
+import { clearStorage, expect, seed, test, todayKey, waitForBlockedRedirect } from './fixtures';
 
 let server: http.Server;
 let origin: string;
@@ -20,7 +20,6 @@ test.afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-const today = () => new Date().toISOString().slice(0, 10);
 const blocked = (id: string, ruleId: string, url: string) =>
   `chrome-extension://${id}/blocked.html?rule=${ruleId}&url=${encodeURIComponent(url)}`;
 
@@ -31,7 +30,7 @@ test.beforeEach(async ({ serviceWorker }) => {
 async function seedReachedRule(worker: Parameters<typeof seed>[0], pattern: string): Promise<void> {
   await seed(worker, {
     rules: [{ id: 'r1', pattern, limitMinutes: 5, createdAt: Date.now() }],
-    usage: { date: today(), seconds: { r1: 300 } },
+    usage: { date: await todayKey(worker), seconds: { r1: 300 } },
   });
 }
 
@@ -99,7 +98,7 @@ test('the extension redirects a matching tab that is over its limit', async ({
   const page = await context.newPage();
 
   await page.goto(`${origin}/`);
-  await page.waitForURL(/blocked\.html/, { timeout: 15_000 });
+  await waitForBlockedRedirect(page, context, serviceWorker);
 
   expect(page.url()).toContain(`chrome-extension://${extensionId}/blocked.html`);
   await expect(page.getByTestId('blocked-title')).toHaveText('Daily limit reached');
@@ -109,7 +108,7 @@ test('the extension redirects a matching tab that is over its limit', async ({
 test('a matching tab under its limit is not redirected', async ({ context, extensionId, serviceWorker }) => {
   await seed(serviceWorker, {
     rules: [{ id: 'r1', pattern: '127\\.0\\.0\\.1', limitMinutes: 5, createdAt: Date.now() }],
-    usage: { date: today(), seconds: { r1: 0 } },
+    usage: { date: await todayKey(serviceWorker), seconds: { r1: 0 } },
   });
   const page = await context.newPage();
   await page.goto(`${origin}/`);
@@ -127,7 +126,7 @@ test('after extending, returning to the site is allowed', async ({ context, exte
 
   // Get blocked by real enforcement first.
   await page.goto(`${origin}/`);
-  await page.waitForURL(/blocked\.html/, { timeout: 15_000 });
+  await waitForBlockedRedirect(page, context, serviceWorker);
 
   // Extend, then continue back to the site; it should now load without redirecting.
   await page.getByTestId('extend-10').click();

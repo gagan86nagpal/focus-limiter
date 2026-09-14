@@ -68,6 +68,19 @@ describe('session lifecycle', () => {
     expect(tracker.isTicking()).toBe(true);
   });
 
+  it('tracks the active tab when Chrome reports no last-focused window', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
+    chromeMock.tabs.query.mockImplementation(async (info: chrome.tabs.QueryInfo) => {
+      if (info.lastFocusedWindow === true) return [];
+      return chromeMock.tabs._tabs.filter((tab) => info.active !== true || tab.active);
+    });
+
+    await tracker.reconcile();
+
+    expect((await loadRuntime()).session).toMatchObject({ tabId: 7, ruleIds: ['r1'] });
+  });
+
   it('accrues usage when the session ends', async () => {
     await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
     setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
