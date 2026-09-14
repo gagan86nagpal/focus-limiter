@@ -67,7 +67,11 @@ export function createChromeMock() {
         (message: unknown, sender: unknown, sendResponse: (response: unknown) => void) => boolean | void
       >(),
     },
-    storage: { local, session },
+    storage: {
+      local,
+      session,
+      onChanged: fakeEvent<(changes: Record<string, unknown>, areaName: string) => void>(),
+    },
     tabs: {
       _tabs: tabs,
       query: vi.fn(async (info: chrome.tabs.QueryInfo) => {

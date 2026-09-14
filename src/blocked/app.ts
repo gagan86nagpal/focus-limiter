@@ -7,6 +7,11 @@ export interface BlockedDeps {
   send: <M extends Message>(message: M) => Promise<ResponseFor<M>>;
   navigate: (url: string) => void;
   search: string;
+  /**
+   * Registers a callback for stored-state changes. A page whose initial load found no rule
+   * hides its controls, so without this it would stay stuck until a manual reload.
+   */
+  subscribe?: (onChange: () => void) => void;
 }
 
 export const TEXT = {
@@ -120,6 +125,7 @@ export function createBlockedPage(root: Document, deps: BlockedDeps) {
     button.addEventListener('click', () => void extend(Number(button.dataset['extend'])));
   }
   els.continueButton.addEventListener('click', continueToSite);
+  deps.subscribe?.(() => void load());
 
   return { load, extend, continueToSite };
 }

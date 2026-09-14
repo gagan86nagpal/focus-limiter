@@ -10,7 +10,7 @@ import {
 } from '../shared/rules';
 import { startOfDay } from '../shared/time';
 import type { Rule, RuleView, Session, StateView, UsageDay } from '../shared/types';
-import { loadData, loadRuntime, saveData, saveRuntime } from './store';
+import { loadData, loadRuntime, saveData, saveRuntime, saveUsage } from './store';
 
 export const ENFORCE_ALARM = 'focus-limiter:enforce';
 export const HEARTBEAT_ALARM = 'focus-limiter:heartbeat';
@@ -133,7 +133,7 @@ export function createTracker(options: TrackerOptions = {}) {
       }
     }
 
-    await saveData(data);
+    await saveUsage(data.usage);
     await saveRuntime({ ...runtime, session });
 
     if (session !== null) {

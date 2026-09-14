@@ -96,6 +96,40 @@ describe('session lifecycle', () => {
   });
 });
 
+describe('reconcile persistence', () => {
+  it('never writes the rules key, so a concurrent rule edit cannot be lost', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
+    chromeMock.storage.local.set.mockClear();
+
+    await tracker.reconcile();
+
+    const written = chromeMock.storage.local.set.mock.calls.flatMap(([items]) =>
+      Object.keys(items as Record<string, unknown>),
+    );
+    expect(written).not.toContain('rules');
+    expect(written).toContain('usage');
+  });
+
+  it('keeps a rule that was stored while reconcile was in flight', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
+
+    // Land a rule write between reconcile's read and its write-back.
+    const realGet = chromeMock.storage.local.get;
+    chromeMock.storage.local.get = vi.fn(async (keys?: string[] | string | null) => {
+      const result = await realGet(keys);
+      chromeMock.storage.local.get = realGet;
+      await chromeMock.storage.local.set({ rules: [mkRule()] });
+      return result;
+    }) as typeof realGet;
+
+    await tracker.reconcile();
+
+    expect((await loadData(clock)).rules).toEqual([mkRule()]);
+  });
+});
+
 describe('blocking', () => {
   it('redirects to the blocked page when a matching rule is exhausted', async () => {
     await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: { r1: 300 } } });

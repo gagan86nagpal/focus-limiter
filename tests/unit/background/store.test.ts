@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { installChromeMock, type ChromeMock } from '../../helpers/chrome-mock';
-import { emptyUsage, loadData, loadRuntime, saveData, saveRuntime } from '../../../src/background/store';
+import { emptyUsage, loadData, loadRuntime, saveData, saveRuntime, saveUsage } from '../../../src/background/store';
 import type { Rule } from '../../../src/shared/types';
 
 const NOW = new Date(2026, 8, 14, 10, 0, 0).getTime();
@@ -51,6 +51,14 @@ describe('background store', () => {
     const data = await loadData(NOW);
     expect(data.rules).toEqual([rule]);
     expect(data.usage.seconds['r1']).toBe(30);
+  });
+
+  it('saveUsage writes usage without disturbing stored rules', async () => {
+    await saveData({ rules: [rule], usage: { date: '2026-09-14', seconds: { r1: 30 } } });
+    await saveUsage({ date: '2026-09-14', seconds: { r1: 90 } });
+    const data = await loadData(NOW);
+    expect(data.rules).toEqual([rule]);
+    expect(data.usage.seconds['r1']).toBe(90);
   });
 
   it('loadRuntime returns defaults when nothing is stored', async () => {

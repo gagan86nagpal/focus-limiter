@@ -31,6 +31,21 @@ describe('blocked entry', () => {
     expect(document.getElementById('pattern')?.textContent).toBe('x');
   });
 
+  it('reloads on local storage changes and ignores other areas', async () => {
+    vi.resetModules();
+    await import('../../../src/blocked/index');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chromeMock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+
+    chromeMock.storage.onChanged.emit({ usage: {} }, 'session');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chromeMock.runtime.sendMessage).toHaveBeenCalledTimes(1);
+
+    chromeMock.storage.onChanged.emit({ usage: {} }, 'local');
+    await new Promise((r) => setTimeout(r, 0));
+    expect(chromeMock.runtime.sendMessage).toHaveBeenCalledTimes(2);
+  });
+
   it('navigates using window.location.assign on continue', async () => {
     vi.resetModules();
     await import('../../../src/blocked/index');

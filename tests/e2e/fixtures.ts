@@ -39,14 +39,24 @@ export const test = base.extend<ExtensionFixtures>({
 
 export const expect = test.expect;
 
-/** Replaces stored rules and usage, as the extension would after edits. */
+/**
+ * Replaces stored rules and usage, as the extension would after edits.
+ *
+ * This writes around the tracker rather than through its serialised queue, so a reconcile that
+ * is mid read-modify-write can still land on top of it. Writing and then confirming the values
+ * actually stuck keeps that from silently starting a test with an empty store.
+ */
 export async function seed(
   worker: Worker,
   data: { rules?: unknown[]; usage?: unknown },
 ): Promise<void> {
-  await worker.evaluate(async (payload) => {
-    await chrome.storage.local.set(payload as Record<string, unknown>);
-  }, data);
+  await expect(async () => {
+    const stored = await worker.evaluate(async (payload) => {
+      await chrome.storage.local.set(payload as Record<string, unknown>);
+      return chrome.storage.local.get(Object.keys(payload));
+    }, data);
+    expect(stored).toEqual(data);
+  }).toPass({ timeout: 10_000 });
 }
 
 export async function clearStorage(worker: Worker): Promise<void> {
