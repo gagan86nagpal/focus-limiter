@@ -667,9 +667,18 @@ button {
   cursor: zoom-in;
 }
 
-/* Already as far in as it goes, so the pointer goes back to reading the minutes. */
-.chart.is-zoomed {
-  cursor: crosshair;
+/* Mid-stretch, so the pointer shows which way the window is being sized. */
+.chart.is-selecting {
+  cursor: ew-resize;
+}
+
+/* The stretch being drawn, which is a preview of the window a release would leave. */
+.tl-band {
+  fill: var(--color-accent);
+  fill-opacity: 0.18;
+  stroke: var(--color-accent);
+  stroke-width: 1;
+  stroke-opacity: 0.7;
 }
 
 .chart-zoom {

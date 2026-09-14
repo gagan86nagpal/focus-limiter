@@ -6,12 +6,15 @@ import {
   BLOCK_FAILED_TEXT,
   HOVER_HINT,
   HOVER_TOLERANCE_MINUTES,
+  MIN_ZOOM_MINUTES,
   PALETTE_SIZE,
+  WHOLE_DAY,
   ZOOMED_HINT,
   ZOOM_MINUTES,
   axisLabel,
   colourClass,
   createActivityPanel,
+  dragWindow,
   gridStep,
   hoverTolerance,
   nearestSlot,
@@ -88,10 +91,33 @@ function moveOver(clientX: number): void {
   chart.dispatchEvent(new MouseEvent('mousemove', { clientX, bubbles: true }));
 }
 
-function clickOver(clientX: number): void {
+function pressAt(clientX: number, button = 0): void {
   const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
-  chart.dispatchEvent(new MouseEvent('click', { clientX, bubbles: true }));
+  chart.dispatchEvent(new MouseEvent('mousedown', { clientX, button, bubbles: true }));
 }
+
+/** The release is listened for on the document, so a stretch can end anywhere. */
+function releaseAt(clientX: number): void {
+  document.dispatchEvent(new MouseEvent('mouseup', { clientX, bubbles: true }));
+}
+
+function clickOver(clientX: number): void {
+  pressAt(clientX);
+  releaseAt(clientX);
+}
+
+/** Press, drag, release: the pointer maths works in pixels, which here are minutes. */
+function stretchOver(fromX: number, toX: number): void {
+  pressAt(fromX);
+  moveOver(toX);
+  releaseAt(toX);
+}
+
+const band = () => document.querySelector('.tl-band') as SVGRectElement;
+const leaveChart = () => {
+  const chart = document.getElementById('activity-chart') as unknown as SVGSVGElement;
+  chart.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+};
 
 const axisLabels = () =>
   Array.from(document.querySelectorAll('#activity-axis span')).map((s) => s.textContent);
@@ -552,6 +578,47 @@ describe('chart window maths', () => {
     expect(gridStep(ZOOM_MINUTES)).toBe(10);
   });
 
+  it('steps down to the minute for the narrowest windows', () => {
+    expect(gridStep(10)).toBe(1);
+    expect(gridStep(30)).toBe(5);
+    expect(gridStep(300)).toBe(30);
+  });
+
+  describe('dragWindow', () => {
+    it('takes the stretch as drawn, with the far end exclusive', () => {
+      expect(dragWindow(540, 600, WHOLE_DAY)).toEqual({ start: 540, end: 600 });
+    });
+
+    it('reads a stretch drawn right to left the same way', () => {
+      expect(dragWindow(600, 540, WHOLE_DAY)).toEqual({ start: 540, end: 600 });
+    });
+
+    it('widens a twitch around its middle instead of zooming to one minute', () => {
+      const range = dragWindow(600, 601, WHOLE_DAY);
+      expect(range.end - range.start).toBe(MIN_ZOOM_MINUTES);
+      expect(range.start).toBe(598);
+    });
+
+    it('keeps a widened stretch on the day at either end', () => {
+      expect(dragWindow(0, 1, WHOLE_DAY)).toEqual({ start: 0, end: MIN_ZOOM_MINUTES });
+      expect(dragWindow(MINUTES_PER_DAY - 1, MINUTES_PER_DAY, WHOLE_DAY)).toEqual({
+        start: MINUTES_PER_DAY - MIN_ZOOM_MINUTES,
+        end: MINUTES_PER_DAY,
+      });
+    });
+
+    it('cannot select wider than the window it was drawn on', () => {
+      expect(dragWindow(0, MINUTES_PER_DAY, { start: 540, end: 600 })).toEqual({
+        start: 540,
+        end: 600,
+      });
+    });
+
+    it('stays inside a window it is narrowing', () => {
+      expect(dragWindow(555, 570, { start: 540, end: 600 })).toEqual({ start: 555, end: 570 });
+    });
+  });
+
   it('reads the end of the day as 24:00 rather than one minute short of it', () => {
     expect(axisLabel(0)).toBe('00:00');
     expect(axisLabel(540)).toBe('09:00');
@@ -705,6 +772,139 @@ describe('zooming the day strip', () => {
 
     expect(el('activity-tooltip').hidden).toBe(false);
     expect(el('activity-tooltip').style.left).toBe('0%');
+  });
+
+  it('zooms to the stretch that was drawn, not a fixed hour', async () => {
+    await open();
+
+    stretchOver(545, 682);
+
+    // 09:05 to 11:22, which is no hour boundary at all.
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('545 0 137 48');
+    expect(el('activity-zoom-range').textContent).toBe('09:05–11:22');
+    expect(el('activity-zoom-out').hidden).toBe(false);
+  });
+
+  it('previews the stretch as it is drawn, and reads out how long it is', async () => {
+    await open();
+    pressAt(545);
+
+    moveOver(725);
+
+    expect(band().getAttribute('visibility')).toBe('visible');
+    expect(band().getAttribute('x')).toBe('545');
+    expect(band().getAttribute('width')).toBe('180');
+    expect(el('activity-hint').textContent).toBe('09:05–12:05 · 3h 00m');
+    expect(el('activity-chart').classList.contains('is-selecting')).toBe(true);
+
+    releaseAt(725);
+
+    // The preview gives way to the zoom it promised.
+    expect(band().getAttribute('visibility')).toBe('hidden');
+    expect(el('activity-chart').classList.contains('is-selecting')).toBe(false);
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('545 0 180 48');
+  });
+
+  it('reads a stretch drawn leftwards the same as one drawn rightwards', async () => {
+    await open();
+
+    stretchOver(682, 545);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('545 0 137 48');
+  });
+
+  it('pins a stretch that runs off the end of the day to midnight', async () => {
+    await open();
+
+    stretchOver(1380, MINUTES_PER_DAY + 200);
+
+    expect(el('activity-zoom-range').textContent).toBe('23:00–24:00');
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('1380 0 60 48');
+  });
+
+  it('narrows again when a stretch is drawn inside a zoomed window', async () => {
+    await open();
+    clickOver(545);
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`540 0 ${ZOOM_MINUTES} 48`);
+
+    // The chart still spans the full width, so a quarter across is now a quarter of the hour.
+    stretchOver(360, 720);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('555 0 15 48');
+    expect(el('activity-zoom-range').textContent).toBe('09:15–09:30');
+  });
+
+  it('treats too small a movement as a click on the hour', async () => {
+    await open();
+    pressAt(545);
+
+    moveOver(547);
+
+    expect(band().getAttribute('visibility')).toBe('hidden');
+
+    releaseAt(547);
+
+    expect(el('activity-chart').getAttribute('viewBox')).toBe(`540 0 ${ZOOM_MINUTES} 48`);
+  });
+
+  it('zooms to the clicked hour from inside a wider stretch', async () => {
+    await open();
+    stretchOver(0, 300);
+
+    clickOver(600);
+
+    // 600 of 1440 pixels across a 00:00-05:00 window lands at 02:05, so the 02:00 hour.
+    expect(el('activity-zoom-range').textContent).toBe('02:00–03:00');
+  });
+
+  it('keeps the stretch alive when the pointer leaves the strip', async () => {
+    await open();
+    pressAt(545);
+    moveOver(725);
+
+    leaveChart();
+
+    expect(band().getAttribute('visibility')).toBe('visible');
+
+    releaseAt(725);
+    expect(el('activity-chart').getAttribute('viewBox')).toBe('545 0 180 48');
+  });
+
+  it('ignores a press that is not the primary button', async () => {
+    await open();
+
+    pressAt(545, 2);
+    releaseAt(545);
+
+    expect(el('activity-zoom-out').hidden).toBe(true);
+  });
+
+  it('ignores a press before the chart has been laid out', async () => {
+    const { panel } = mount();
+    await panel.load();
+
+    pressAt(545);
+    releaseAt(545);
+
+    expect(el('activity-zoom-out').hidden).toBe(true);
+  });
+
+  it('ignores a release that follows no press', async () => {
+    await open();
+
+    releaseAt(545);
+
+    expect(el('activity-zoom-out').hidden).toBe(true);
+  });
+
+  it('stops previewing if the chart loses its layout mid-stretch', async () => {
+    await open();
+    pressAt(545);
+    sizeChart(0);
+
+    moveOver(725);
+
+    expect(band().getAttribute('visibility')).toBe('hidden');
   });
 
   it('will not name a minute that the zoom has pushed off screen', async () => {

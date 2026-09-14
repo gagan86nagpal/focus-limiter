@@ -167,6 +167,46 @@ test('clicking the chart zooms into that hour, and the chip goes back to the day
   await expect(axis).toHaveText(['00:00', '06:00', '12:00', '18:00', '24:00']);
 });
 
+test('stretching across the chart zooms to that range, not a fixed hour', async ({
+  page,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedToday(serviceWorker);
+  await openActivity(page, extensionId);
+
+  const chart = page.getByTestId('activity-chart');
+  await chart.scrollIntoViewIfNeeded();
+  const box = (await chart.boundingBox())!;
+  const at = (minute: number) => box.x + box.width * (minute / 1440);
+  const middle = box.y + box.height / 2;
+
+  // Stretch from about 09:30 to about 11:45, which starts and ends mid-hour. A whole day in
+  // roughly 900 pixels is under two minutes per pixel, so the readings are asserted loosely.
+  await page.mouse.move(at(570), middle);
+  await page.mouse.down();
+  await page.mouse.move(at(705), middle, { steps: 12 });
+
+  // The band previews the window, and the hint reads it out, before anything is committed.
+  await expect(page.getByTestId('activity-band')).toBeVisible();
+  await expect(page.getByTestId('activity-hint')).toHaveText(/^09:[23]\d–11:[45]\d · 2h \d\dm$/);
+  await expect(page.getByTestId('activity-zoom-out')).toBeHidden();
+
+  await page.mouse.up();
+
+  await expect(page.getByTestId('activity-zoom-range')).toHaveText(/^09:[23]\d–11:[45]\d$/);
+  await expect(page.getByTestId('activity-band')).toBeHidden();
+  const axis = page.locator('#activity-axis span');
+  await expect(axis.first()).toHaveText(/^09:[23]\d$/);
+  await expect(axis.last()).toHaveText(/^11:[45]\d$/);
+
+  // video.example ran 10:00-10:20, inside the stretch, so its block is on screen and wider.
+  await expect(page.locator('#activity-chart .tl-bar').nth(1)).toBeVisible();
+
+  await page.getByTestId('activity-zoom-out').click();
+  await expect(axis).toHaveText(['00:00', '06:00', '12:00', '18:00', '24:00']);
+});
+
 test('moving to another day drops the zoom', async ({ page, extensionId, serviceWorker }) => {
   await seedActivity(serviceWorker, [
     { date: dayKey(), segments: TODAY },
