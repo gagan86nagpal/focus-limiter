@@ -29,7 +29,7 @@ export const test = base.extend<ExtensionFixtures>({
   },
   serviceWorker: async ({ context }, use) => {
     let [worker] = context.serviceWorkers();
-    worker ??= await context.waitForEvent('serviceworker');
+    worker ??= await context.waitForEvent('serviceworker', { timeout: 30_000 });
     await use(worker);
   },
   extensionId: async ({ serviceWorker }, use) => {
