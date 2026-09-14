@@ -95,6 +95,11 @@ a general form-level message.
 `{ ok: true; value: RuleInput }` or `{ ok: false; errors; message }`. It is the
 single validation path, used by both the dashboard form and the worker.
 
+### Reference data
+`SITE_PRESETS` in `src/shared/presets.ts` is a static list of common time-sink
+sites, each a `SitePreset` (`id`, `label`, `pattern`, `limitMinutes`). It powers
+the "Common sites" quick-add chips in the rule dialog and is not persisted.
+
 ## Storage layout
 
 | Store | Keys | Contents | Lifetime |
@@ -122,7 +127,9 @@ focus changed, idle state changed, alarm fired) triggers one serialized
 ## User flows
 
 ### 1. Create a rule
-Dashboard → **Add rule** → enter pattern and limit (live regex validation and
+Dashboard → **Add rule** → optionally click a **Common sites** chip to fill the
+pattern and a suggested limit from `SITE_PRESETS`, or enter them by hand (live
+regex validation and
 optional test-URL match feedback) → **Save rule** → `createRule` → worker
 validates, enforces the 10-rule cap, assigns a UUID, persists, reconciles → the
 new card appears.

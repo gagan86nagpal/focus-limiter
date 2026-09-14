@@ -82,6 +82,11 @@
         <h2 class="dialog-title" id="dialog-title">Create rule</h2>
 
         <div class="field">
+          <span class="field-label" id="preset-label">Common sites</span>
+          <div class="preset-list" id="preset-list" data-testid="preset-list" role="group" aria-labelledby="preset-label"></div>
+        </div>
+
+        <div class="field">
           <label class="field-label" for="pattern">URL pattern</label>
           <input class="input input-mono" id="pattern" name="pattern" type="text" autocomplete="off"
             spellcheck="false" placeholder="youtube\.com/shorts.*" data-testid="pattern-input" />

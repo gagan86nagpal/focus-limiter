@@ -101,6 +101,25 @@ test('deletes a rule after confirmation', async ({ context, extensionId, service
   await expect(page.getByTestId('empty-state')).toBeVisible();
 });
 
+test('adds a rule from a common-site preset', async ({ context, extensionId }) => {
+  const page = await context.newPage();
+  await openDashboard(page, extensionId);
+
+  await page.getByTestId('add-rule').click();
+  await page.getByTestId('preset-youtube-shorts').click();
+
+  // The preset fills the pattern and a suggested limit.
+  await expect(page.getByTestId('pattern-input')).toHaveValue('youtube\\.com/shorts');
+  await expect(page.getByTestId('limit-input')).toHaveValue('10');
+
+  await page.getByTestId('save-rule').click();
+
+  const card = page.getByTestId('rule-card');
+  await expect(card).toHaveCount(1);
+  await expect(card).toContainText('youtube\\.com/shorts');
+  await expect(page.getByTestId('rule-count')).toHaveText('1 of 10');
+});
+
 test('enforces the maximum of ten rules', async ({ context, extensionId, serviceWorker }) => {
   const rules = Array.from({ length: 10 }, (_, i) => ({
     id: `r${i}`,

@@ -21,6 +21,8 @@ The npm package / repository is named **`chrome-site-blocker`**; the product is
 - **At most 10 rules**, enforced in both the UI and the background.
 - **Live rule form.** Immediate regex validation and match testing against a
   sample URL.
+- **Common-site presets.** One-click chips (YouTube Shorts, X, Instagram,
+  Reddit, TikTok, Facebook) fill the pattern and a suggested limit.
 
 ## Project layout
 
@@ -32,7 +34,7 @@ public/            Static assets copied verbatim into dist/
   styles.css       Shared design system
   icons/           Generated PNG icons
 src/
-  shared/          Types, time formatting, rule validation, messaging
+  shared/          Types, time formatting, rule validation, messaging, presets
   background/      Service worker: storage, the tracker core, event wiring
   dashboard/       Dashboard UI logic
   blocked/         Blocked-page UI logic

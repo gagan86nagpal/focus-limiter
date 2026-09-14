@@ -10,6 +10,7 @@ import {
 } from '../../../src/dashboard/app';
 import type { RuleView, StateView } from '../../../src/shared/types';
 import type { Message, ResponseFor } from '../../../src/shared/messages';
+import { SITE_PRESETS } from '../../../src/shared/presets';
 
 const ruleView = (over: Partial<RuleView> = {}): RuleView => ({
   id: 'r1',
@@ -302,6 +303,58 @@ describe('rule dialog', () => {
     byId('add-rule').click();
     byId('cancel-rule').click();
     expect(byId('rule-dialog').hasAttribute('open')).toBe(false);
+  });
+});
+
+describe('common-site presets', () => {
+  it('renders a chip for every preset', async () => {
+    const h = setup();
+    await h.app.refresh();
+    const chips = document.querySelectorAll('#preset-list .chip');
+    expect(chips).toHaveLength(SITE_PRESETS.length);
+  });
+
+  it('fills the pattern and limit when a preset is clicked', async () => {
+    const h = setup();
+    await h.app.refresh();
+    byId('add-rule').click();
+    const preset = SITE_PRESETS[0]!;
+    (document.querySelector(`[data-testid="preset-${preset.id}"]`) as HTMLButtonElement).click();
+    expect(byId<HTMLInputElement>('pattern').value).toBe(preset.pattern);
+    expect(byId<HTMLInputElement>('limit').value).toBe(String(preset.limitMinutes));
+  });
+
+  it('updates match feedback after applying a preset and a test URL', async () => {
+    const h = setup();
+    await h.app.refresh();
+    byId('add-rule').click();
+    const shorts = SITE_PRESETS.find((p) => p.id === 'youtube-shorts')!;
+    (document.querySelector(`[data-testid="preset-${shorts.id}"]`) as HTMLButtonElement).click();
+    const testUrl = byId<HTMLInputElement>('test-url');
+    testUrl.value = 'https://youtube.com/shorts/abc';
+    testUrl.dispatchEvent(new Event('input'));
+    expect(byId('match-status').textContent).toBe(MATCH_TEXT.match);
+  });
+
+  it('clears existing field and form errors when a preset is applied', async () => {
+    const h = setup();
+    await h.app.refresh();
+    byId('add-rule').click();
+    // Force validation errors first.
+    byId<HTMLInputElement>('pattern').value = '(';
+    byId<HTMLInputElement>('limit').value = '0';
+    byId('rule-form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await flush();
+    expect(byId('pattern-error').textContent).toBeTruthy();
+    byId('form-error').textContent = 'stale message';
+
+    const preset = SITE_PRESETS[0]!;
+    (document.querySelector(`[data-testid="preset-${preset.id}"]`) as HTMLButtonElement).click();
+    expect(byId('pattern-error').textContent).toBe('');
+    expect(byId('limit-error').textContent).toBe('');
+    expect(byId('form-error').textContent).toBe('');
+    expect(byId<HTMLInputElement>('pattern').hasAttribute('aria-invalid')).toBe(false);
+    expect(byId<HTMLInputElement>('limit').hasAttribute('aria-invalid')).toBe(false);
   });
 });
 

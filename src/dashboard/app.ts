@@ -1,6 +1,7 @@
 import type { Message, ResponseFor, RuleResult } from '../shared/messages';
 import { MAX_RULES, testPattern, validateRuleInput, type PatternTestResult, type RuleErrors } from '../shared/rules';
 import { formatLimit, formatRelative, formatUsage } from '../shared/time';
+import { SITE_PRESETS, type SitePreset } from '../shared/presets';
 import type { RuleView, StateView } from '../shared/types';
 
 export interface DashboardDeps {
@@ -36,6 +37,7 @@ export function createDashboard(root: Document, deps: DashboardDeps) {
     ruleList: q<HTMLUListElement>(root, '#rule-list'),
     lastUpdated: q<HTMLElement>(root, '#last-updated'),
     template: q<HTMLTemplateElement>(root, '#rule-card-template'),
+    presetList: q<HTMLElement>(root, '#preset-list'),
     dialog: q<HTMLDialogElement>(root, '#rule-dialog'),
     form: q<HTMLFormElement>(root, '#rule-form'),
     dialogTitle: q<HTMLElement>(root, '#dialog-title'),
@@ -152,6 +154,32 @@ export function createDashboard(root: Document, deps: DashboardDeps) {
     card.classList.toggle('is-reached', rule.limitReached);
   }
 
+  // ----- presets -----
+
+  function applyPreset(preset: SitePreset): void {
+    els.pattern.value = preset.pattern;
+    els.limit.value = String(preset.limitMinutes);
+    els.patternError.textContent = '';
+    els.pattern.removeAttribute('aria-invalid');
+    els.limitError.textContent = '';
+    els.limit.removeAttribute('aria-invalid');
+    els.formError.textContent = '';
+    updateMatchStatus();
+    els.pattern.focus();
+  }
+
+  function renderPresets(): void {
+    for (const preset of SITE_PRESETS) {
+      const chip = root.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip';
+      chip.textContent = preset.label;
+      chip.setAttribute('data-testid', `preset-${preset.id}`);
+      chip.addEventListener('click', () => applyPreset(preset));
+      els.presetList.appendChild(chip);
+    }
+  }
+
   // ----- dialog -----
 
   function openDialog(ruleId: string | null): void {
@@ -232,6 +260,7 @@ export function createDashboard(root: Document, deps: DashboardDeps) {
 
   // ----- wiring -----
 
+  renderPresets();
   els.addRule.addEventListener('click', () => openDialog(null));
   els.emptyAddRule.addEventListener('click', () => openDialog(null));
   els.cancel.addEventListener('click', closeDialog);
