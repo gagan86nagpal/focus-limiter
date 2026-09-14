@@ -1,6 +1,7 @@
 /* Focus Limiter — design tokens
    A restrained, high-contrast palette: near-black, white, neutral grays, one accent. */
 :root {
+  color-scheme: light;
   --color-bg: #ffffff;
   --color-surface: #ffffff;
   --color-surface-muted: #f6f6f6;
@@ -41,8 +42,29 @@
   --transition: 120ms ease;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-bg: #111111;
+  --color-surface: #181818;
+  --color-surface-muted: #202020;
+  --color-surface-strong: #2c2c2c;
+  --color-text: #f5f5f5;
+  --color-text-secondary: #b8b8b8;
+  --color-text-tertiary: #858585;
+  --color-border: #383838;
+  --color-accent: #7aa2ff;
+  --color-danger: #ff8a82;
+  --color-danger-soft: #3a1d1b;
+  --color-success: #66d697;
+  --color-on-solid: #111111;
+  --color-primary-hover: #dddddd;
+  --color-primary-active: #c7c7c7;
+  --color-secondary-hover: #3a3a3a;
+  --color-danger-hover: #ffaaa4;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     color-scheme: dark;
     --color-bg: #111111;
     --color-surface: #181818;
@@ -102,9 +124,9 @@ button {
 
 /* ---------- Layout ---------- */
 .container {
-  max-width: 720px;
+  max-width: 820px;
   margin: 0 auto;
-  padding: var(--space-7) var(--space-5) var(--space-8);
+  padding: var(--space-6) var(--space-5) var(--space-7);
 }
 
 .page-header {
@@ -112,7 +134,17 @@ button {
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-5);
-  margin-bottom: var(--space-7);
+  margin-bottom: var(--space-6);
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.theme-toggle {
+  color: var(--color-text-secondary);
 }
 
 .brand {
@@ -283,30 +315,38 @@ button {
 .rule-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .rule-card {
-  padding: var(--space-5);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "top actions"
+    "stats actions"
+    "progress progress";
+  column-gap: var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 
 .rule-card-top {
+  grid-area: top;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-3);
 }
 
 .rule-pattern {
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   word-break: break-all;
 }
@@ -324,16 +364,16 @@ button {
 }
 
 .rule-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
+  grid-area: stats;
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-3);
 }
 
 .stat {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: baseline;
+  gap: var(--space-2);
 }
 
 .stat-label {
@@ -345,7 +385,7 @@ button {
 }
 
 .stat-value {
-  font-size: 28px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -353,6 +393,7 @@ button {
 }
 
 .progress {
+  grid-area: progress;
   height: 4px;
   border-radius: 2px;
   background: var(--color-surface-strong);
@@ -373,11 +414,12 @@ button {
 
 .rule-actions,
 .rule-confirm {
+  grid-area: actions;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: var(--space-2);
-  margin-top: var(--space-4);
+  margin: 0;
 }
 
 .rule-confirm-copy {
@@ -570,6 +612,13 @@ button {
   justify-content: center;
 }
 
+.theme-toggle-corner {
+  position: fixed;
+  top: var(--space-4);
+  right: var(--space-4);
+  z-index: 1;
+}
+
 .blocked {
   width: 100%;
   max-width: 440px;
@@ -699,6 +748,32 @@ button {
 
   .page-header {
     flex-direction: column;
+  }
+
+  .page-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .rule-card {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "top"
+      "stats"
+      "progress"
+      "actions";
+    row-gap: var(--space-3);
+  }
+
+  .rule-stats {
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: 0;
+  }
+
+  .rule-actions,
+  .rule-confirm {
+    justify-content: flex-start;
   }
 
   .brand {

@@ -10,3 +10,18 @@ test('the dashboard renders its heading', async ({ context, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/dashboard.html`);
   await expect(page.getByRole('heading', { name: 'Focus Limiter' })).toBeVisible();
 });
+
+test('the theme toggle persists light and dark mode', async ({ context, extensionId }) => {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/dashboard.html`);
+
+  await page.getByTestId('theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.getByTestId('theme-toggle')).toHaveText('Light mode');
+
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+  await page.getByTestId('theme-toggle').click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+});
