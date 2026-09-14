@@ -1,12 +1,134 @@
-/* Demo-only chrome, loaded after styles.css so the extension never ships these rules. */
+/* Demo-only chrome, loaded after styles.css so the extension never ships these rules.
+   Everything here is the website around the product: the top nav, the walkthrough copy, the
+   frames the real screens sit in, the install steps and the footer. The screens themselves are
+   styled entirely by styles.css, which is how they stay honest. */
 
+/* ---------- Site shell ---------- */
+.site-nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.site-nav-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 var(--space-5);
+}
+
+/* The nav owns the rule under the tabs, so the tablist drops its own. */
+.site-tabs {
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+.site-star {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition);
+}
+
+.site-star:hover {
+  background: var(--color-surface-muted);
+  border-color: var(--color-text-tertiary);
+}
+
+.site-star-icon {
+  color: var(--color-text-tertiary);
+}
+
+.site-main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+/* ---------- Walkthrough ---------- */
+.demo-step + .demo-step {
+  margin-top: var(--space-8);
+}
+
+.demo-step-title {
+  margin-bottom: var(--space-3);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.demo-step-copy {
+  max-width: 72ch;
+  margin-bottom: var(--space-5);
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.demo-step-copy strong {
+  color: var(--color-text);
+}
+
+/* The frame reads as "this is the app", which keeps the dashboard's own heading from looking
+   like a second page title. */
+.app-frame {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.app-frame .container {
+  max-width: none;
+}
+
+.app-frame-blocked {
+  display: flex;
+  justify-content: center;
+}
+
+/* Two rules in styles.css hang off `.page-blocked`, which the demo's body is not. */
+.demo-blocked #continue {
+  margin-top: var(--space-6);
+}
+
+.demo-blocked .link {
+  display: inline-block;
+  margin-top: var(--space-6);
+}
+
+.demo-note {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--color-text-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Live-demo banner ---------- */
 .demo-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-7);
   padding: var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -34,9 +156,184 @@
   align-items: center;
 }
 
+/* ---------- Install ---------- */
+.install {
+  max-width: 74ch;
+}
+
+.install-title {
+  margin-bottom: var(--space-3);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.install-lead,
+.install-copy,
+.install-step-copy {
+  color: var(--color-text-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.install-lead {
+  margin-bottom: var(--space-6);
+}
+
+.install-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: install;
+}
+
+.install-step {
+  position: relative;
+  padding-left: var(--space-7);
+  padding-bottom: var(--space-6);
+  counter-increment: install;
+}
+
+/* A numbered rail: the marker sits on a line that runs between the steps. */
+.install-step::before {
+  content: counter(install);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-text);
+  color: var(--color-on-solid);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.install-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 32px;
+  bottom: 0;
+  width: 1px;
+  background: var(--color-border);
+}
+
+.install-step-title {
+  margin-bottom: var(--space-3);
+  padding-top: 3px;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.install-code {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+
+.code-inline {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.install-subtitle {
+  margin-top: var(--space-6);
+  margin-bottom: var(--space-2);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+/* ---------- Author ---------- */
+.site-about {
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+}
+
+.site-about-inner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  max-width: 900px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+}
+
+.site-about-photo {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.site-about-name {
+  margin-bottom: var(--space-1);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.site-about-copy {
+  max-width: 68ch;
+  margin-bottom: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.site-about-links {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 14px;
+}
+
+.site-about-sep {
+  color: var(--color-text-tertiary);
+}
+
 @media (max-width: 600px) {
   .demo-banner {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .site-nav-inner {
+    padding: 0 var(--space-4);
+  }
+
+  .site-star {
+    /* The label is the least useful thing on a narrow screen; the star still links out. */
+    font-size: 0;
+    gap: 0;
+    padding: var(--space-2);
+  }
+
+  .site-star-icon {
+    font-size: 15px;
+  }
+
+  .site-main {
+    padding: var(--space-5) var(--space-4) var(--space-7);
+  }
+
+  .site-about-inner {
+    flex-direction: column;
+    padding: var(--space-5) var(--space-4);
   }
 }

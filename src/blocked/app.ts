@@ -36,17 +36,21 @@ function q<T extends Element>(root: ParentNode, selector: string): T {
   return element;
 }
 
-export function createBlockedPage(root: Document, deps: BlockedDeps) {
+/**
+ * `root` is a subtree rather than the document so the demo site can mount this page inside a
+ * panel that already holds the dashboard.
+ */
+export function createBlockedPage(root: ParentNode, deps: BlockedDeps) {
   const params = new URLSearchParams(deps.search);
   const ruleId = params.get('rule') ?? '';
   const originalUrl = params.get('url') ?? '';
 
   const els = {
     title: q<HTMLElement>(root, '#title'),
-    pattern: q<HTMLElement>(root, '#pattern'),
+    pattern: q<HTMLElement>(root, '#blocked-pattern'),
     usage: q<HTMLElement>(root, '#usage'),
     used: q<HTMLElement>(root, '#used'),
-    limit: q<HTMLElement>(root, '#limit'),
+    limit: q<HTMLElement>(root, '#blocked-limit'),
     message: q<HTMLElement>(root, '#message'),
     extend: q<HTMLElement>(root, '#extend'),
     extendButtons: Array.from(root.querySelectorAll<HTMLButtonElement>('[data-extend]')),

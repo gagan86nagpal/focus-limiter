@@ -84,9 +84,9 @@ describe('blocked page', () => {
     const h = setup();
     await h.page.load();
     expect(byId('title').textContent).toBe(TEXT.reachedTitle);
-    expect(byId('pattern').textContent).toBe('x\\.com');
+    expect(byId('blocked-pattern').textContent).toBe('x\\.com');
     expect(byId('used').textContent).toBe('5m 00s');
-    expect(byId('limit').textContent).toBe('5m');
+    expect(byId('blocked-limit').textContent).toBe('5m');
     expect(byId('message').textContent).toBe(TEXT.reachedMessage);
     expect(byId<HTMLButtonElement>('continue').disabled).toBe(true);
     expect(byId('hint').textContent).toBe(TEXT.reachedHint);
@@ -124,7 +124,7 @@ describe('blocked page', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 5 });
     expect(byId('title').textContent).toBe(TEXT.extendedTitle);
-    expect(byId('limit').textContent).toBe('10m');
+    expect(byId('blocked-limit').textContent).toBe('10m');
     expect(byId<HTMLButtonElement>('continue').disabled).toBe(false);
   });
 
@@ -134,7 +134,7 @@ describe('blocked page', () => {
     byId('extend-10').click();
     await new Promise((r) => setTimeout(r, 0));
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 10 });
-    expect(byId('limit').textContent).toBe('15m');
+    expect(byId('blocked-limit').textContent).toBe('15m');
   });
 
   it('extends by a custom whole number of minutes', async () => {
@@ -146,7 +146,7 @@ describe('blocked page', () => {
     );
     await new Promise((r) => setTimeout(r, 0));
     expect(h.send).toHaveBeenCalledWith({ type: 'extendLimit', id: 'r1', minutes: 2 });
-    expect(byId('limit').textContent).toBe('7m');
+    expect(byId('blocked-limit').textContent).toBe('7m');
     expect(byId<HTMLInputElement>('custom-minutes').value).toBe('');
   });
 
@@ -255,7 +255,7 @@ describe('blocked page', () => {
     await new Promise((r) => setTimeout(r, 0));
 
     expect(byId('extend').hidden).toBe(false);
-    expect(byId('pattern').textContent).toBe('x\\.com');
+    expect(byId('blocked-pattern').textContent).toBe('x\\.com');
   });
 
   it('handles a completely empty query string', async () => {

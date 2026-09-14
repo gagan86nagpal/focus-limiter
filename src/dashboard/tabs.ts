@@ -1,35 +1,46 @@
 export type TabId = 'rules' | 'activity';
 
-export const TAB_IDS: TabId[] = ['rules', 'activity'];
+/** A tablist has at least one tab, which is what lets the indexing below skip its guards. */
+export type TabIds<T extends string> = readonly [T, ...T[]];
 
-function el<T extends Element>(root: Document, selector: string): T {
+export const TAB_IDS: TabIds<TabId> = ['rules', 'activity'];
+
+function el<T extends Element>(root: ParentNode, selector: string): T {
   const found = root.querySelector<T>(selector);
   if (found === null) throw new Error(`Missing element: ${selector}`);
   return found;
 }
 
-export interface TabsApi {
-  select: (id: TabId) => void;
-  current: () => TabId;
+export interface TabsApi<T extends string = TabId> {
+  select: (id: T) => void;
+  current: () => T;
 }
 
 /**
- * Wires the tablist. Panels stay in the DOM and are toggled with `hidden` so the rules tab
- * keeps its scroll position and in-flight edits when you look at activity and come back.
+ * Wires a tablist. Panels stay in the DOM and are toggled with `hidden` so a panel keeps its
+ * scroll position and in-flight edits while another one is on screen.
+ *
+ * Elements are read as `#{prefix}tab-{id}` and `#{prefix}panel-{id}`, so one page can carry
+ * several independent tablists without their selectors colliding.
  */
-export function setupTabs(root: Document, onSelect: (id: TabId) => void): TabsApi {
-  const tabs = new Map<TabId, HTMLButtonElement>();
-  const panels = new Map<TabId, HTMLElement>();
-  for (const id of TAB_IDS) {
-    tabs.set(id, el<HTMLButtonElement>(root, `#tab-${id}`));
-    panels.set(id, el<HTMLElement>(root, `#panel-${id}`));
+export function createTabList<T extends string>(
+  root: ParentNode,
+  ids: TabIds<T>,
+  prefix: string,
+  onSelect: (id: T) => void,
+): TabsApi<T> {
+  const tabs = new Map<T, HTMLButtonElement>();
+  const panels = new Map<T, HTMLElement>();
+  for (const id of ids) {
+    tabs.set(id, el<HTMLButtonElement>(root, `#${prefix}tab-${id}`));
+    panels.set(id, el<HTMLElement>(root, `#${prefix}panel-${id}`));
   }
 
-  let active: TabId = 'rules';
+  let active: T = ids[0];
 
-  function select(id: TabId): void {
+  function select(id: T): void {
     active = id;
-    for (const tabId of TAB_IDS) {
+    for (const tabId of ids) {
       const tab = tabs.get(tabId) as HTMLButtonElement;
       const panel = panels.get(tabId) as HTMLElement;
       const selected = tabId === id;
@@ -43,20 +54,20 @@ export function setupTabs(root: Document, onSelect: (id: TabId) => void): TabsAp
 
   /** Arrow keys move along the tablist and take focus with them, per the ARIA tabs pattern. */
   function step(offset: number): void {
-    const index = TAB_IDS.indexOf(active);
-    const next = TAB_IDS[(index + offset + TAB_IDS.length) % TAB_IDS.length] as TabId;
+    const index = ids.indexOf(active);
+    const next = ids[(index + offset + ids.length) % ids.length] as T;
     select(next);
     (tabs.get(next) as HTMLButtonElement).focus();
   }
 
-  for (const id of TAB_IDS) {
+  for (const id of ids) {
     const tab = tabs.get(id) as HTMLButtonElement;
     tab.addEventListener('click', () => select(id));
     tab.addEventListener('keydown', (event) => {
       if (event.key === 'ArrowRight') step(1);
       else if (event.key === 'ArrowLeft') step(-1);
-      else if (event.key === 'Home') select(TAB_IDS[0] as TabId);
-      else if (event.key === 'End') select(TAB_IDS[TAB_IDS.length - 1] as TabId);
+      else if (event.key === 'Home') select(ids[0]);
+      else if (event.key === 'End') select(ids[ids.length - 1] as T);
       else return;
       event.preventDefault();
     });
@@ -64,4 +75,9 @@ export function setupTabs(root: Document, onSelect: (id: TabId) => void): TabsAp
 
   select(active);
   return { select, current: () => active };
+}
+
+/** The dashboard's own Rules/Activity tablist. */
+export function setupTabs(root: ParentNode, onSelect: (id: TabId) => void): TabsApi<TabId> {
+  return createTabList(root, TAB_IDS, '', onSelect);
 }

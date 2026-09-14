@@ -28,7 +28,7 @@ describe('blocked entry', () => {
     await import('../../../src/blocked/index');
     await new Promise((r) => setTimeout(r, 0));
     expect(chromeMock.runtime.sendMessage).toHaveBeenCalledWith({ type: 'getState' });
-    expect(document.getElementById('pattern')?.textContent).toBe('x');
+    expect(document.getElementById('blocked-pattern')?.textContent).toBe('x');
   });
 
   it('reloads on local storage changes and ignores other areas', async () => {
