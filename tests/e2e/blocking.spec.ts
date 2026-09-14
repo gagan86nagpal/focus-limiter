@@ -136,29 +136,40 @@ test('a custom amount raises the limit by the entered minutes', async ({
   await expect(page.getByTestId('blocked-limit')).toHaveText('7m');
 });
 
-test('the page pops in rather than appearing as if it had always been there', async ({
+test('the page pops past its resting size and settles back', async ({
   context,
   extensionId,
   serviceWorker,
 }) => {
   await seedReachedRule(serviceWorker, '127\\.0\\.0\\.1');
   const page = await context.newPage();
-  await page.goto(blocked(extensionId, 'r1', `${origin}/`));
 
-  const card = page.locator('.blocked');
-  await expect(card).toBeVisible();
-  const animation = await card.evaluate((node) => {
-    const style = getComputedStyle(node);
-    return { name: style.animationName, duration: style.animationDuration };
+  // Sampling has to be installed before the first paint, because the whole thing is over in
+  // under a third of a second. Asserting the computed scale, rather than that some animation is
+  // declared, is the only way to catch an entrance that technically runs but cannot be seen.
+  await page.addInitScript(() => {
+    const scales: number[] = [];
+    Object.assign(window, { __scales: scales });
+    const tick = (): void => {
+      const card = document.querySelector('.blocked');
+      if (card !== null) {
+        const { transform } = getComputedStyle(card);
+        scales.push(transform === 'none' ? 1 : new DOMMatrixReadOnly(transform).a);
+      }
+      if (performance.now() < 800) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
   });
-  expect(animation.name).toBe('blocked-pop');
-  expect(animation.duration).toBe('0.26s');
 
-  // It settles, rather than leaving the card mid-flight. The animation fills both ways, so the
-  // resting state is the identity matrix rather than no transform at all.
-  await expect
-    .poll(async () => card.evaluate((node) => getComputedStyle(node).transform))
-    .toBe('matrix(1, 0, 0, 1, 0, 0)');
+  await page.goto(blocked(extensionId, 'r1', `${origin}/`));
+  await page.waitForTimeout(900);
+
+  const scales = await page.evaluate(() => (window as unknown as { __scales: number[] }).__scales);
+  expect(scales.length).toBeGreaterThan(10);
+  // Arrives small, overshoots full size by enough to see, and comes to rest at exactly full.
+  expect(Math.min(...scales)).toBeLessThanOrEqual(0.9);
+  expect(Math.max(...scales)).toBeGreaterThan(1.02);
+  expect(scales.at(-1)).toBe(1);
 });
 
 test('the pop is dropped for anyone who asked for less motion', async ({

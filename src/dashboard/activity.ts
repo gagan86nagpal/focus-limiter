@@ -21,15 +21,19 @@ export interface ActivityDeps {
 
 export const ACTIVITY_ERROR_TEXT = "Couldn't load activity. Please try again.";
 export const BLOCK_FAILED_TEXT = "Couldn't create that rule. Please try again.";
-export const HOVER_HINT = 'Hover for detail · click to zoom into an hour';
-export const ZOOMED_HINT = 'Hover for detail · × for the whole day';
+export const HOVER_HINT = 'Hover for detail · drag across to zoom in';
+export const ZOOMED_HINT = 'Drag to zoom further · × for the whole day';
 export const DEFAULT_BLOCK_MINUTES = 10;
 /** Hosts beyond this many share the neutral colour in the chart, legend, and rows. */
 export const PALETTE_SIZE = 6;
 /** How far either side of the pointer to look for an active minute, across a whole day. */
 export const HOVER_TOLERANCE_MINUTES = 8;
-/** Clicking the day strip zooms to the hour that was clicked. */
+/** A click, as opposed to a drag, zooms to the hour it landed in. */
 export const ZOOM_MINUTES = 60;
+/** The narrowest window a drag can leave you in, so a twitch cannot zoom to one minute. */
+export const MIN_ZOOM_MINUTES = 5;
+/** Pointer travel, in pixels, below which a press counts as a click rather than a stretch. */
+export const DRAG_THRESHOLD_PX = 4;
 /** Labels along the axis, which follow whatever window is on screen. */
 export const AXIS_TICKS = 4;
 
@@ -63,9 +67,33 @@ export interface ChartWindow {
 
 export const WHOLE_DAY: ChartWindow = { start: 0, end: MINUTES_PER_DAY };
 
-/** Gridlines every hour across a day, every ten minutes once zoomed in. */
+/**
+ * Gridline spacing for a window, from hourly across a whole day down to every minute in a
+ * narrow one. A single ratio cannot serve both ends - a day wants 24 lines and a zoomed hour
+ * wants 6 - so the steps are chosen by eye to leave a handful of lines rather than a fence.
+ */
 export function gridStep(span: number): number {
-  return span <= 120 ? 10 : 60;
+  if (span <= 15) return 1;
+  if (span <= 45) return 5;
+  if (span <= 180) return 10;
+  if (span <= 480) return 30;
+  return 60;
+}
+
+/**
+ * The window a stretch between minutes `a` and `b` selects. Either may be the start, since
+ * dragging leftwards is as natural as rightwards, and the far end is exclusive so that letting
+ * go on 10:00 having started at 09:00 leaves an hour rather than an hour and a minute.
+ *
+ * A very short stretch is widened around its middle rather than honoured literally, and the
+ * result is kept inside the window it was drawn on, so zooming can only ever narrow.
+ */
+export function dragWindow(a: number, b: number, bounds: ChartWindow): ChartWindow {
+  const limit = bounds.end - bounds.start;
+  const span = Math.min(limit, Math.max(MIN_ZOOM_MINUTES, Math.abs(b - a)));
+  const middle = (a + b) / 2;
+  const start = Math.round(Math.min(Math.max(middle - span / 2, bounds.start), bounds.end - span));
+  return { start, end: start + span };
 }
 
 /** Midnight is the end of one window and the start of the next, and reads differently in each. */
@@ -170,10 +198,28 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
   let view: ActivityView | null = null;
   let bars: SVGRectElement[] = [];
   let rows = new Map<string, HTMLLIElement>();
-  let cursor: SVGLineElement | null = null;
   let pinnedHost: string | null = null;
-  /** null means the whole day; otherwise the hour the chart is zoomed into. */
+  /** null means the whole day; otherwise the stretch of it the chart is zoomed into. */
   let zoom: ChartWindow | null = null;
+  /** Set while the pointer is down on the strip, from the minute it went down on. */
+  let drag: { fromMinute: number; fromX: number; toMinute: number } | null = null;
+
+  // Both overlays live above the bars and outlast each redraw, which keeps them off the
+  // render path and out of the null checks that a per-render node would need.
+  const cursor = root.createElementNS(SVG_NS, 'line');
+  cursor.setAttribute('y1', '0');
+  cursor.setAttribute('y2', String(CHART_HEIGHT));
+  cursor.setAttribute('class', 'tl-cursor');
+  cursor.setAttribute('visibility', 'hidden');
+
+  const band = root.createElementNS(SVG_NS, 'rect');
+  band.setAttribute('y', '0');
+  band.setAttribute('height', String(CHART_HEIGHT));
+  band.setAttribute('class', 'tl-band');
+  // Without this the 1px edges would be scaled by the viewBox into fat slabs.
+  band.setAttribute('vector-effect', 'non-scaling-stroke');
+  band.setAttribute('visibility', 'hidden');
+  band.setAttribute('data-testid', 'activity-band');
 
   // ----- data -----
 
@@ -325,12 +371,7 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
       bars.push(bar);
     }
 
-    cursor = root.createElementNS(SVG_NS, 'line');
-    cursor.setAttribute('y1', '0');
-    cursor.setAttribute('y2', String(CHART_HEIGHT));
-    cursor.setAttribute('class', 'tl-cursor');
-    cursor.setAttribute('visibility', 'hidden');
-    els.chart.appendChild(cursor);
+    els.chart.append(band, cursor);
   }
 
   function renderAxis(): void {
@@ -445,20 +486,30 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
 
   // ----- pointer interaction -----
 
-  /** Minute under the pointer, or null when the chart has no width yet. */
-  function minuteAt(event: MouseEvent): number | null {
+  /**
+   * Minute under the pointer, or null when the chart has no width to measure against.
+   *
+   * Hovering past either edge is nothing, but a stretch that runs off the edge is pinned to it,
+   * since letting go out there clearly means "to the end". Clamping also allows the far
+   * boundary itself: a hover has to name a real minute, where the end of a stretch is a line
+   * between them, and the last of those lines is midnight.
+   */
+  function minuteAt(event: MouseEvent, clamp = false): number | null {
     const box = els.chart.getBoundingClientRect();
     if (box.width === 0) return null;
-    const ratio = (event.clientX - box.left) / box.width;
-    if (ratio < 0 || ratio > 1) return null;
+    let ratio = (event.clientX - box.left) / box.width;
+    if (ratio < 0 || ratio > 1) {
+      if (!clamp) return null;
+      ratio = Math.min(1, Math.max(0, ratio));
+    }
     const { start, end } = zoom ?? WHOLE_DAY;
-    return Math.min(end - 1, start + Math.floor(ratio * (end - start)));
+    return Math.min(clamp ? end : end - 1, start + Math.floor(ratio * (end - start)));
   }
 
   function hideTooltip(): void {
     els.tooltip.hidden = true;
     els.hint.textContent = zoom === null ? HOVER_HINT : ZOOMED_HINT;
-    cursor?.setAttribute('visibility', 'hidden');
+    cursor.setAttribute('visibility', 'hidden');
     hover(null);
   }
 
@@ -479,10 +530,34 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
     els.tooltipHost.textContent = slot.host;
     els.tooltipDur.textContent = formatUsage(slot.activeSeconds);
     els.hint.textContent = `${formatClock(slot.minute)} · ${slot.host}`;
-    cursor?.setAttribute('x1', String(slot.minute));
-    cursor?.setAttribute('x2', String(slot.minute));
-    cursor?.setAttribute('visibility', 'visible');
+    cursor.setAttribute('x1', String(slot.minute));
+    cursor.setAttribute('x2', String(slot.minute));
+    cursor.setAttribute('visibility', 'visible');
     hover(slot.host);
+  }
+
+  /** Draws the stretch so far, and reads it out. Shows exactly the window a release would give. */
+  function showDrag(current: NonNullable<typeof drag>, event: MouseEvent): void {
+    const minute = minuteAt(event, true);
+    if (minute === null) return;
+    drag = { ...current, toMinute: minute };
+    // Below the threshold the release is a click, so there is nothing to preview yet.
+    if (Math.abs(event.clientX - current.fromX) < DRAG_THRESHOLD_PX) return;
+
+    const range = dragWindow(current.fromMinute, minute, zoom ?? WHOLE_DAY);
+    band.setAttribute('x', String(range.start));
+    band.setAttribute('width', String(range.end - range.start));
+    band.setAttribute('visibility', 'visible');
+    els.chart.classList.add('is-selecting');
+    els.hint.textContent =
+      `${formatClock(range.start)}–${axisLabel(range.end)} · ` +
+      formatCompact((range.end - range.start) * 60);
+  }
+
+  function endDrag(): void {
+    drag = null;
+    band.setAttribute('visibility', 'hidden');
+    els.chart.classList.remove('is-selecting');
   }
 
   // ----- wiring -----
@@ -493,15 +568,42 @@ export function createActivityPanel(root: Document, deps: ActivityDeps) {
   els.date.addEventListener('change', () => {
     if (els.date.value !== '') void load(els.date.value);
   });
-  els.chart.addEventListener('mousemove', showTooltip);
-  els.chart.addEventListener('mouseleave', hideTooltip);
-  els.chart.addEventListener('click', (event) => {
-    // One level of zoom: the chip is how you come back out, so a second click does nothing.
-    if (zoom !== null) return;
+  els.chart.addEventListener('mousemove', (event) => {
+    if (drag === null) {
+      showTooltip(event);
+      return;
+    }
+    showDrag(drag, event);
+  });
+  els.chart.addEventListener('mouseleave', () => {
+    // Leaving the strip mid-stretch is not abandoning it; the release still counts.
+    if (drag === null) hideTooltip();
+  });
+  els.chart.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
     const minute = minuteAt(event);
     if (minute === null) return;
-    const start = Math.floor(minute / ZOOM_MINUTES) * ZOOM_MINUTES;
-    applyZoom({ start, end: start + ZOOM_MINUTES });
+    drag = { fromMinute: minute, fromX: event.clientX, toMinute: minute };
+    hideTooltip();
+    // Otherwise stretching selects the labels either side of the chart.
+    event.preventDefault();
+  });
+  // On the document, so a stretch that ends off the chart still lands.
+  root.addEventListener('mouseup', (event) => {
+    const current = drag;
+    if (current === null) return;
+    endDrag();
+
+    const visible = zoom ?? WHOLE_DAY;
+    if (Math.abs(event.clientX - current.fromX) >= DRAG_THRESHOLD_PX) {
+      applyZoom(dragWindow(current.fromMinute, current.toMinute, visible));
+      return;
+    }
+    // A plain click falls back to the hour it landed in, once there is more than an hour on
+    // screen to narrow down from.
+    if (visible.end - visible.start <= ZOOM_MINUTES) return;
+    const hour = Math.floor(current.fromMinute / ZOOM_MINUTES) * ZOOM_MINUTES;
+    applyZoom(dragWindow(hour, hour + ZOOM_MINUTES, visible));
   });
   els.zoomOut.addEventListener('click', () => applyZoom(null));
 
