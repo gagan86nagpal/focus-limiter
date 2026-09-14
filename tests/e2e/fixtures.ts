@@ -59,6 +59,17 @@ export async function seed(
   }).toPass({ timeout: 10_000 });
 }
 
+/** Replaces the rolling activity history, which lives under its own storage key. */
+export async function seedActivity(worker: Worker, days: unknown[]): Promise<void> {
+  await expect(async () => {
+    const stored = await worker.evaluate(async (activity) => {
+      await chrome.storage.local.set({ activity });
+      return chrome.storage.local.get(['activity']);
+    }, days);
+    expect(stored).toEqual({ activity: days });
+  }).toPass({ timeout: 10_000 });
+}
+
 export async function clearStorage(worker: Worker): Promise<void> {
   await worker.evaluate(async () => {
     await chrome.storage.local.clear();

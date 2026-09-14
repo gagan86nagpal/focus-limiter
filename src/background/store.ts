@@ -1,5 +1,5 @@
 import { dateKey } from '../shared/time';
-import type { Rule, RuntimeState, StoredData, UsageDay } from '../shared/types';
+import type { ActivityDay, Rule, RuntimeState, StoredData, UsageDay } from '../shared/types';
 
 export function emptyUsage(now: number): UsageDay {
   return { date: dateKey(now), seconds: {} };
@@ -26,6 +26,20 @@ export async function saveData(data: StoredData): Promise<void> {
  */
 export async function saveUsage(usage: UsageDay): Promise<void> {
   await chrome.storage.local.set({ usage });
+}
+
+/**
+ * The rolling activity history. Kept under its own key, and written on its own, so recording
+ * a page view never rewrites `rules` or `usage`.
+ */
+export async function loadActivity(): Promise<ActivityDay[]> {
+  const raw = await chrome.storage.local.get(['activity']);
+  const days = raw['activity'];
+  return Array.isArray(days) ? (days as ActivityDay[]) : [];
+}
+
+export async function saveActivity(days: ActivityDay[]): Promise<void> {
+  await chrome.storage.local.set({ activity: days });
 }
 
 /** Volatile state lives in storage.session so it survives worker restarts but not browser restarts. */

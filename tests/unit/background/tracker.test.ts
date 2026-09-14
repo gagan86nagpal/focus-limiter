@@ -5,9 +5,18 @@ import {
   createTracker,
   type Tracker,
 } from '../../../src/background/tracker';
-import { loadData, loadRuntime, saveData, saveRuntime } from '../../../src/background/store';
+import {
+  loadActivity,
+  loadData,
+  loadRuntime,
+  saveActivity,
+  saveData,
+  saveRuntime,
+} from '../../../src/background/store';
 import { installChromeMock, makeTab, type ChromeMock } from '../../helpers/chrome-mock';
 import { MAX_LIMIT_MINUTES } from '../../../src/shared/rules';
+import { RETENTION_DAYS } from '../../../src/shared/activity';
+import { dateKey, shiftDays } from '../../../src/shared/time';
 import type { Rule } from '../../../src/shared/types';
 
 const START = new Date(2026, 8, 14, 12, 0, 0).getTime();
@@ -92,7 +101,8 @@ describe('session lifecycle', () => {
 
     const data = await loadData(clock);
     expect(data.usage.seconds['r1']).toBeCloseTo(90, 3);
-    expect((await loadRuntime()).session).toBeNull();
+    // The unruled page still gets a session so activity can record it, but it accrues nothing.
+    expect((await loadRuntime()).session?.ruleIds).toEqual([]);
     expect(tracker.isTicking()).toBe(false);
     expect(chromeMock.alarms.clear).toHaveBeenCalledWith(ENFORCE_ALARM);
   });
@@ -204,11 +214,13 @@ describe('reconcile guards', () => {
     expect((await loadRuntime()).session).toBeNull();
   });
 
-  it('does not start a session on a tab that matches no rule', async () => {
+  it('starts a rule-less session on a tab that matches no rule', async () => {
     await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
     setActiveTab(makeTab({ id: 7, url: 'https://safe.com' }));
     await tracker.reconcile();
-    expect((await loadRuntime()).session).toBeNull();
+    // Tracked for activity, but with no rule ids it arms no deadline and accrues no usage.
+    expect((await loadRuntime()).session).toMatchObject({ tabId: 7, ruleIds: [] });
+    expect(tracker.isTicking()).toBe(false);
   });
 
   it('handles there being no active tab', async () => {
@@ -254,6 +266,172 @@ describe('enforcement ticker', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(tracker.isTicking()).toBe(false);
+  });
+
+  it('stops the ticker when the deadline is dropped mid-reconcile', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://x.com/home' }));
+    await tracker.reconcile();
+    expect(tracker.isTicking()).toBe(true);
+
+    // Hold the reconcile open after it drops the deadline but before it stops the ticker,
+    // so a tick lands in the window where no limit is armed.
+    let release = (): void => undefined;
+    chromeMock.alarms.clear = vi.fn(
+      async () =>
+        await new Promise<boolean>((resolve) => {
+          release = () => resolve(true);
+        }),
+    );
+    setActiveTab(null);
+    const pending = tracker.reconcile();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(tracker.isTicking()).toBe(false);
+
+    release();
+    await pending;
+  });
+});
+
+describe('activity recording', () => {
+  it('records a segment for a page that matches no rule', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://www.news.com/story' }));
+    await tracker.reconcile();
+
+    clock += 30_000;
+    setActiveTab(null);
+    await tracker.reconcile();
+
+    const days = await loadActivity();
+    expect(days).toHaveLength(1);
+    expect(days[0]?.segments).toEqual([
+      { url: 'https://www.news.com/story', host: 'news.com', startedAt: START, endedAt: START + 30_000 },
+    ]);
+  });
+
+  it('merges consecutive reconciles on the same page into one segment', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://news.com/story' }));
+    await tracker.reconcile();
+
+    clock += 30_000;
+    await tracker.reconcile();
+    clock += 30_000;
+    await tracker.reconcile();
+
+    const segments = (await loadActivity())[0]?.segments;
+    expect(segments).toHaveLength(1);
+    expect(segments?.[0]?.endedAt).toBe(START + 60_000);
+  });
+
+  it('ignores a glance shorter than a second', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://news.com/story' }));
+    await tracker.reconcile();
+
+    clock += 200;
+    setActiveTab(null);
+    await tracker.reconcile();
+
+    expect(await loadActivity()).toEqual([]);
+  });
+
+  it('records nothing when there was no previous session', async () => {
+    setActiveTab(null);
+    await tracker.reconcile();
+    expect(await loadActivity()).toEqual([]);
+  });
+
+  it('drops history that falls outside the retention window', async () => {
+    const stale = dateKey(shiftDays(START, -(RETENTION_DAYS + 2)));
+    await saveActivity([{ date: stale, segments: [] }]);
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://news.com/story' }));
+    await tracker.reconcile();
+
+    clock += 5000;
+    setActiveTab(null);
+    await tracker.reconcile();
+
+    expect((await loadActivity()).map((day) => day.date)).toEqual(['2026-09-14']);
+  });
+
+  it('does not write the rules or usage keys while recording activity', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://news.com/story' }));
+    await tracker.reconcile();
+    chromeMock.storage.local.set.mockClear();
+
+    clock += 5000;
+    setActiveTab(null);
+    await tracker.reconcile();
+
+    const activityWrites = chromeMock.storage.local.set.mock.calls
+      .map(([items]) => Object.keys(items as Record<string, unknown>))
+      .filter((keys) => keys.includes('activity'));
+    expect(activityWrites).toEqual([['activity']]);
+  });
+});
+
+describe('getActivity', () => {
+  it('summarises a stored day', async () => {
+    await saveActivity([
+      {
+        date: '2026-09-14',
+        segments: [
+          { url: 'https://x.com/a', host: 'x.com', startedAt: START, endedAt: START + 120_000 },
+          { url: 'https://y.com/b', host: 'y.com', startedAt: START + 120_000, endedAt: START + 180_000 },
+        ],
+      },
+    ]);
+    const view = await tracker.getActivity('2026-09-14');
+    expect(view.totalSeconds).toBe(180);
+    expect(view.hostCount).toBe(2);
+    expect(view.top.map((entry) => entry.host)).toEqual(['x.com', 'y.com']);
+  });
+
+  it('flags a host an existing rule already covers', async () => {
+    await saveData({ rules: [mkRule()], usage: { date: '2026-09-14', seconds: {} } });
+    await saveActivity([
+      {
+        date: '2026-09-14',
+        segments: [{ url: 'https://x.com/a', host: 'x.com', startedAt: START, endedAt: START + 60_000 }],
+      },
+    ]);
+    const view = await tracker.getActivity('2026-09-14');
+    expect(view.top[0]?.hasRule).toBe(true);
+  });
+
+  it('folds the in-flight session in so the day reaches now', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://live.com/now' }));
+    await tracker.reconcile();
+
+    clock += 45_000;
+    const view = await tracker.getActivity('2026-09-14');
+    expect(view.totalSeconds).toBe(45);
+    expect(view.top[0]?.host).toBe('live.com');
+  });
+
+  it('ignores an in-flight session that has barely started', async () => {
+    await saveData({ rules: [], usage: { date: '2026-09-14', seconds: {} } });
+    setActiveTab(makeTab({ id: 7, url: 'https://live.com/now' }));
+    await tracker.reconcile();
+
+    clock += 100;
+    const view = await tracker.getActivity('2026-09-14');
+    expect(view.totalSeconds).toBe(0);
+    expect(view.top).toEqual([]);
+  });
+
+  it('returns an empty day for a date with no history', async () => {
+    setActiveTab(null);
+    const view = await tracker.getActivity('2026-09-01');
+    expect(view).toMatchObject({ date: '2026-09-01', totalSeconds: 0, hostCount: 0, peakMinute: null });
+    expect(view.top).toEqual([]);
   });
 });
 

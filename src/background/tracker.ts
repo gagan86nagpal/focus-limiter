@@ -8,9 +8,24 @@ import {
   ruleMatches,
   validateRuleInput,
 } from '../shared/rules';
+import {
+  appendSegment,
+  buildActivityView,
+  isRecordable,
+  pruneDays,
+  sessionSegment,
+} from '../shared/activity';
 import { startOfDay } from '../shared/time';
-import type { Rule, RuleView, Session, StateView, UsageDay } from '../shared/types';
-import { loadData, loadRuntime, saveData, saveRuntime, saveUsage } from './store';
+import type { ActivityView, Rule, RuleView, Session, StateView, UsageDay } from '../shared/types';
+import {
+  loadActivity,
+  loadData,
+  loadRuntime,
+  saveActivity,
+  saveData,
+  saveRuntime,
+  saveUsage,
+} from './store';
 
 export const ENFORCE_ALARM = 'focus-limiter:enforce';
 export const HEARTBEAT_ALARM = 'focus-limiter:heartbeat';
@@ -86,14 +101,18 @@ export function createTracker(options: TrackerOptions = {}) {
     }
   }
 
-  /** While a session is active, poll storage (which keeps the worker alive) and enforce the deadline precisely. */
+  /** While a limit is counting down, poll storage (which keeps the worker alive) and enforce the deadline precisely. */
   async function tick(): Promise<void> {
+    if (deadline === null) {
+      stopTicker();
+      return;
+    }
     const { session } = await loadRuntime();
     if (session === null) {
       stopTicker();
       return;
     }
-    if (deadline !== null && now() >= deadline) {
+    if (now() >= deadline) {
       await reconcile();
     }
   }
@@ -107,19 +126,35 @@ export function createTracker(options: TrackerOptions = {}) {
     return active;
   }
 
+  /** Files the session that just ended into the rolling activity history. */
+  async function recordActivity(session: Session | null, at: number): Promise<void> {
+    if (session === null) return;
+    const segment = sessionSegment(session, at);
+    if (!isRecordable(segment)) return;
+    const days = await loadActivity();
+    await saveActivity(pruneDays(appendSegment(days, segment), at));
+  }
+
   /**
-   * The heart of the extension. Settles the previous session into usage, then looks at the
-   * focused tab: block it if a matching rule is exhausted, otherwise start a new session.
+   * The heart of the extension. Settles the previous session into usage and activity, then
+   * looks at the focused tab: block it if a matching rule is exhausted, otherwise start a
+   * new session.
+   *
+   * A session is opened for any trackable page, not only pages a rule covers, because the
+   * activity history needs to see the whole day. Pages without a matching rule simply carry
+   * no rule ids, so they accrue no usage and arm no deadline.
    */
   async function reconcileNow(): Promise<void> {
     const at = now();
     const runtime = await loadRuntime();
     const data = await loadData(at);
-    if (runtime.session !== null) {
-      data.usage = settle(data.usage, runtime.session, at);
+    const previous = runtime.session;
+    if (previous !== null) {
+      data.usage = settle(data.usage, previous, at);
     }
 
     let session: Session | null = null;
+    let nextDeadline: number | null = null;
     const tab = runtime.focused && !runtime.idle ? await getActiveTab() : undefined;
     if (tab !== undefined && tab.id !== undefined && isTrackableUrl(tab.url)) {
       const url = tab.url;
@@ -128,23 +163,26 @@ export function createTracker(options: TrackerOptions = {}) {
       if (exceeded !== undefined) {
         // The tab may have closed in the meantime; that is not an error worth surfacing.
         await chrome.tabs.update(tab.id, { url: blockedPageUrl(exceeded.id, url) }).catch(() => undefined);
-      } else if (matched.length > 0) {
+      } else {
         session = { tabId: tab.id, url, ruleIds: matched.map((rule) => rule.id), startedAt: at };
-        const remaining = Math.min(
-          ...matched.map((rule) => limitSeconds(rule) - (data.usage.seconds[rule.id] ?? 0)),
-        );
-        deadline = at + remaining * 1000;
+        if (matched.length > 0) {
+          const remaining = Math.min(
+            ...matched.map((rule) => limitSeconds(rule) - (data.usage.seconds[rule.id] ?? 0)),
+          );
+          nextDeadline = at + remaining * 1000;
+        }
       }
     }
 
+    await recordActivity(previous, at);
     await saveUsage(data.usage);
     await saveRuntime({ ...runtime, session });
 
-    if (session !== null) {
-      await chrome.alarms.create(ENFORCE_ALARM, { when: deadline as number });
+    deadline = nextDeadline;
+    if (nextDeadline !== null) {
+      await chrome.alarms.create(ENFORCE_ALARM, { when: nextDeadline });
       startTicker();
     } else {
-      deadline = null;
       await chrome.alarms.clear(ENFORCE_ALARM);
       stopTicker();
     }
@@ -159,8 +197,24 @@ export function createTracker(options: TrackerOptions = {}) {
     };
   }
 
+  /**
+   * Activity for one day. The in-flight session is folded in so the chart reaches "now"
+   * instead of stopping at the last reconcile.
+   */
+  async function readActivity(date: string): Promise<ActivityView> {
+    const at = now();
+    const [days, data, runtime] = await Promise.all([loadActivity(), loadData(at), loadRuntime()]);
+    const live = runtime.session === null ? null : sessionSegment(runtime.session, at);
+    const withLive = live !== null && isRecordable(live) ? appendSegment(days, live) : days;
+    return buildActivityView(withLive, data.rules, date, at);
+  }
+
   function reconcile(): Promise<void> {
     return enqueue(reconcileNow);
+  }
+
+  function getActivity(date: string): Promise<ActivityView> {
+    return enqueue(() => readActivity(date));
   }
 
   /** Called on install and browser startup. */
@@ -269,6 +323,7 @@ export function createTracker(options: TrackerOptions = {}) {
     setFocused,
     setIdle,
     getState,
+    getActivity,
     createRule,
     updateRule,
     deleteRule,

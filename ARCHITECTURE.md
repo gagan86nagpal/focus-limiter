@@ -5,21 +5,32 @@ share a small set of typed data structures. This document lists the domain
 entities, the data-transfer objects (DTOs) exchanged between surfaces, the
 storage layout, and the user flows.
 
+The diagrams below are generated from `scripts/diagrams.mjs`; run `npm run
+diagrams` after changing the system so the pictures and the prose stay in step.
+
 ## Diagrams
 
 Swimlane renderings of everything below, for readers who prefer a picture.
 
 ### System architecture
 
-Six layers and one direction of dependency.
+Seven lanes and one direction of dependency.
 
 ![System architecture](docs/architecture/system-architecture.png)
 
 ### Request lifecycle
 
-A single "Save rule" click traced across every lane and back to the UI.
+A single **Block** click in the activity tab traced across every lane and back
+to both tabs.
 
 ![Request lifecycle](docs/architecture/request-lifecycle.png)
+
+### Activity pipeline
+
+How a page you looked at becomes a chart you can read, from session to segment
+to rendered day.
+
+![Activity pipeline](docs/architecture/activity-pipeline.png)
 
 ### Domain entities and DTOs
 
@@ -29,7 +40,7 @@ What is stored, what is volatile, and what crosses the UI boundary.
 
 ### User flows
 
-The four journeys a person actually experiences.
+The six journeys a person actually experiences.
 
 ![User flows](docs/architecture/user-flows.png)
 
@@ -37,10 +48,10 @@ The four journeys a person actually experiences.
 
 | Component | Location | Role |
 |-----------|----------|------|
-| Background service worker | `src/background/` | Owns all state, tracks time, enforces limits |
-| Dashboard (options page) | `src/dashboard/` | Create, edit, delete rules; view usage |
+| Background service worker | `src/background/` | Owns all state, tracks time and activity, enforces limits |
+| Dashboard (options page) | `src/dashboard/` | Two tabs: manage rules, and review where time went |
 | Blocked page | `src/blocked/` | Shown when a limit is reached; extend and continue |
-| Shared core | `src/shared/` | Types, DTOs, validation, time formatting, messaging |
+| Shared core | `src/shared/` | Types, DTOs, validation, activity maths, time formatting, messaging |
 
 The two UI surfaces never touch storage directly. They call the background
 worker over `chrome.runtime` messages, and the worker is the single writer of
@@ -68,6 +79,31 @@ Today's accumulated usage, one entry per rule, in seconds.
 | `date` | `string` | Local calendar day, `YYYY-MM-DD`; a change here is the daily reset |
 | `seconds` | `Record<string, number>` | Keyed by rule id |
 
+### ActivitySegment
+One continuous stretch of looking at one URL. Recorded for every page, whether
+or not a rule covers it, because the activity history needs the whole day.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `url` | `string` | The page that was open |
+| `host` | `string` | Hostname without `www.`, the unit everything is grouped by |
+| `startedAt` | `number` | Epoch milliseconds |
+| `endedAt` | `number` | Epoch milliseconds |
+
+Segments shorter than one second are discarded — that is a glance while
+switching tabs, not a visit. A segment that crosses midnight is split so each
+day owns its own time.
+
+### ActivityDay
+Every segment recorded on one local calendar day.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `date` | `string` | Local calendar day, `YYYY-MM-DD` |
+| `segments` | `ActivitySegment[]` | Chronological; adjacent views of the same URL are merged |
+
+The history holds at most `RETENTION_DAYS` (30) of these.
+
 ### Session
 The single active tracking session on the focused tab. Volatile.
 
@@ -75,8 +111,12 @@ The single active tracking session on the focused tab. Volatile.
 |-------|------|-------|
 | `tabId` | `number` | The tab being tracked |
 | `url` | `string` | The URL at session start |
-| `ruleIds` | `string[]` | Every rule that matches this URL |
+| `ruleIds` | `string[]` | Every rule that matches this URL; empty for an unruled page |
 | `startedAt` | `number` | Epoch milliseconds |
+
+A session opens for any trackable page, not only pages a rule covers. One with
+no rule ids accrues no usage and arms no deadline, but it still becomes an
+`ActivitySegment` when it ends.
 
 ### RuntimeState
 Volatile runtime flags, held in session storage.
@@ -97,7 +137,19 @@ the UI never recomputes usage math.
   A rule with today's live usage folded in (stored seconds plus the current
   session's elapsed time).
 - **`StateView`** = `{ rules: RuleView[]; maxRules: number }`.
-  The whole dashboard state in one payload.
+  The whole rules tab in one payload.
+- **`MinuteSlot`** = `{ minute, activeSeconds, host }`.
+  One minute of the day that had activity in it, labelled with the host that
+  took the largest share of it. Quiet minutes are absent rather than zero, so a
+  light day is a few hundred bytes instead of 1440 entries.
+- **`HostTotal`** = `{ host, url, seconds, visits, share, hourly[], suggestedPattern, hasRule }`.
+  One row of the top-sites list. `url` is the page that host spent the most time
+  on, `hourly` is 24 numbers for the sparkline, `suggestedPattern` is the escaped
+  pattern the Block button would create, and `hasRule` says whether one already
+  exists.
+- **`ActivityView`** = the whole activity tab for one date: `totalSeconds`,
+  `coveredSeconds`, `hostCount`, `peakMinute`, `hourly[]`, `minutes[]`, `top[]`,
+  plus `minDate`/`maxDate` for the date picker and `datesWithData`.
 
 ### Message DTOs (UI → worker)
 Defined in `src/shared/messages.ts`. A discriminated union on `type`.
@@ -105,6 +157,7 @@ Defined in `src/shared/messages.ts`. A discriminated union on `type`.
 | Message | Payload | Response |
 |---------|---------|----------|
 | `getState` | — | `StateView` |
+| `getActivity` | `date: 'YYYY-MM-DD'` | `ActivityView` |
 | `createRule` | `input: { pattern, limitMinutes }` | `RuleResult` |
 | `updateRule` | `id`, `input` | `RuleResult` |
 | `deleteRule` | `id` | `{ ok: true }` |
@@ -133,11 +186,24 @@ the "Common sites" quick-add chips in the rule dialog and is not persisted.
 | Store | Keys | Contents | Lifetime |
 |-------|------|----------|----------|
 | `chrome.storage.local` | `rules`, `usage` | `Rule[]`, `UsageDay` | Durable |
+| `chrome.storage.local` | `activity` | `ActivityDay[]` | Rolling 30 days |
 | `chrome.storage.session` | `session`, `focused`, `idle` | `RuntimeState` | Cleared on browser restart |
 
 On read, usage from a previous calendar day is discarded and replaced with an
 empty `UsageDay` — that is the daily reset. All writes go through the worker's
 serialized queue, so overlapping Chrome events cannot corrupt state.
+
+Activity has its own key and its own read/write pair for a reason: page views
+are recorded constantly, and if they travelled with `rules` then every recorded
+view would rewrite the rule list, quietly undoing an edit made since that read.
+
+### Retention
+
+Old days are dropped inside the same write that records a new segment, not on a
+timer. A Manifest V3 worker is asleep most of the time, so a cleanup schedule
+would fire late or not at all; pruning on write means history can only be
+trimmed at the exact moment it grows, and the cost is a filter over at most 30
+entries.
 
 ## The reconcile step
 
@@ -148,9 +214,16 @@ focus changed, idle state changed, alarm fired) triggers one serialized
 1. Fold the previous session's elapsed time into `UsageDay`.
 2. Inspect the focused, non-idle tab.
    - If a matching rule is already exhausted, redirect the tab to `blocked.html`.
-   - Else if any rule matches, start a `Session` with a deadline at the smallest
-     remaining budget, and arm an alarm plus a 1-second ticker.
-   - Else clear the session.
+   - Else start a `Session` for any trackable page. If rules match, set a
+     deadline at the smallest remaining budget and arm an alarm plus a 1-second
+     ticker; if none match, the session accrues nothing.
+   - If there is no trackable tab, clear the session.
+3. File the session that just ended as an `ActivitySegment`, pruning anything
+   older than the retention window in the same write.
+
+The ticker only runs while a deadline is armed. Sessions now exist for ordinary
+browsing too, so tying the ticker to "a session exists" would have meant polling
+every second all day for no reason.
 
 ## User flows
 
@@ -185,3 +258,17 @@ re-blocked.
 ### 6. Reach the maximum
 At 10 rules the dashboard disables **Add rule** and shows a notice; the worker
 independently rejects an 11th `createRule` with an `error`.
+
+### 7. Review where the time went
+**Activity** tab → `getActivity` for today → the worker folds the in-flight
+session into the stored day so the chart reaches *now*, then returns an
+`ActivityView`. The panel draws the day strip, the legend, and the ranked list.
+Hovering the strip names the site at that minute; hovering a row or clicking a
+legend chip dims everything else. **‹** and **›**, the date field, and **Today**
+move within the 30-day window.
+
+### 8. Block a site from activity
+Any top-sites row without a rule carries a minute field and a **Block** button.
+It sends `createRule` with the host's suggested pattern, then reloads both the
+day and the rules tab, so the row flips to **Limited** and the new card is
+waiting when the user switches tabs.

@@ -7,6 +7,8 @@ export async function handleMessage(tracker: Tracker, message: unknown): Promise
   switch (msg.type) {
     case 'getState':
       return tracker.getState();
+    case 'getActivity':
+      return tracker.getActivity(msg.date);
     case 'createRule':
       return tracker.createRule(msg.input);
     case 'updateRule':
