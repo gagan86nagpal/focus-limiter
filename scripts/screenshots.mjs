@@ -1,5 +1,5 @@
 /**
- * Captures the product screenshots used in the README.
+ * Captures the product screenshots used in docs/PRODUCT.md.
  *
  * Loads the built extension into a real Chrome, seeds a believable day of rules and browsing,
  * and photographs each user flow in dark mode. Run `npm run build` first, then:
